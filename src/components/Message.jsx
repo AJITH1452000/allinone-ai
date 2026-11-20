@@ -11,6 +11,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import LanguageIcon from '@mui/icons-material/Language';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined';
@@ -58,9 +59,12 @@ const ARTIFACT_LANG = { 'text/html': 'html', 'image/svg+xml': 'svg', 'applicatio
 export function parseSpecial(content = '') {
   let thought = '';
   let text = content.replace(/<thinking>([\s\S]*?)(<\/thinking>|$)/gi, (_, t) => { thought += t.trim() + '\n'; return ''; });
-  text = text.replace(/<artifact\b([^>]*)>([\s\S]*?)(<\/artifact>|$)/gi, (_, attrs, code) => {
+  // (?<!`) = skip a tag that is only *mentioned* in `backticks` inside a sentence
+  text = text.replace(/(?<!`)<artifact\b([^>]*)>([\s\S]*?)(<\/artifact>|$)/gi, (whole, attrs, code) => {
     const type = /type="([^"]+)"/.exec(attrs)?.[1] || 'text/html';
-    const title = /title="([^"]+)"/.exec(attrs)?.[1] || 'Artifact';
+    let title = /title="([^"]+)"/.exec(attrs)?.[1] || 'Artifact';
+    if (/^[.…\s]*$/.test(title)) title = /<title>([^<]+)<\/title>/i.exec(code)?.[1] || 'Web page'; // model left "…" as the title
+    if (!code.trim() && !/<\/artifact>/i.test(whole)) return ''; // still streaming the opening tag
     const lang = ARTIFACT_LANG[type] || 'html';
     const body = code.replace(/^\s*```[\w-]*\n?/, '').replace(/\n?```\s*$/, '').trim();
     return `\n\n\`\`\`${lang}--${title.replace(/[^\w]+/g, '_')}\n${body}\n\`\`\`\n\n`;
@@ -188,6 +192,11 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
               </Box>
             </Collapse>
           </Box>
+        )}
+        {m.note && (
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, px: 1.25, py: 0.5, borderRadius: '8px', bgcolor: 'action.hover', width: 'fit-content' }}>
+            <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /> {m.note}
+          </Typography>
         )}
         {m.search && (m.search.searching ? (
           <Typography sx={{ fontSize: 13, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>

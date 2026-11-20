@@ -59,7 +59,7 @@ export const kbAddText = (id, name, text) => fetch(`/api/kb/${id}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, text }),
 }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
 
-export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, signal }) {
+export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, onNote, signal }) {
   const r = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -87,6 +87,7 @@ export async function streamChat(payload, { onText, onReasoning, onError, onUsag
         else if (ev.t === 'cost') onCost?.(ev.v);
         else if (ev.t === 'searching') onSearch?.({ searching: true, query: ev.v });
         else if (ev.t === 'search') onSearch?.({ searching: false, ...ev.v });
+        else if (ev.t === 'note') onNote?.(ev.v);
       } catch {}
     }
   }

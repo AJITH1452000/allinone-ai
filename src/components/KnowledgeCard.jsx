@@ -24,6 +24,9 @@ export default function KnowledgeCard({ search, onAsk }) {
   const related = (search.related || []).filter((r) => r.url !== main?.url);
   const summary = main?.text || '';
 
+  // Nothing relevant found → show no card at all (the answer itself explains it)
+  if (!main && !news.length && !web.length && !related.length) return null;
+
   return (
     <Box sx={{ mb: 2, border: 1, borderColor: 'divider', borderRadius: '16px', overflow: 'hidden', bgcolor: 'background.paper', animation: 'fadeUp .3s ease both' }}>
       {main && (
@@ -45,9 +48,23 @@ export default function KnowledgeCard({ search, onAsk }) {
                 </Link>
               )}
             </Typography>
+            {main.facts?.length > 0 && (
+              <Box component="dl" sx={{
+                display: 'grid', gridTemplateColumns: 'minmax(110px, max-content) 1fr', columnGap: 2, rowGap: 0.6, m: 0, mt: 1.5,
+                pt: 1.25, borderTop: 1, borderColor: 'divider', fontSize: 13.5,
+                '& dt': { color: 'text.secondary', fontWeight: 500 }, '& dd': { m: 0, lineHeight: 1.45 },
+              }}>
+                {main.facts.slice(0, more ? 30 : 8).map((f) => (
+                  <Box key={f.label} sx={{ display: 'contents' }}>
+                    <dt>{f.label}</dt>
+                    <dd>{/^https?:\/\//.test(f.value) ? <Link href={f.value} target="_blank" rel="noreferrer">{f.value.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</Link> : f.value}</dd>
+                  </Box>
+                ))}
+              </Box>
+            )}
             <Link href={main.url} target="_blank" rel="noreferrer" underline="hover"
               sx={{ fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 1, color: 'text.secondary' }}>
-              <Box component="img" src={favicon(main.url)} sx={{ width: 14, height: 14 }} /> Wikipedia <OpenInNewIcon sx={{ fontSize: 13 }} />
+              <Box component="img" src={favicon(main.url)} sx={{ width: 14, height: 14 }} /> Wikipedia{main.facts?.length ? ' · Wikidata' : ''} <OpenInNewIcon sx={{ fontSize: 13 }} />
             </Link>
           </Box>
         </Box>

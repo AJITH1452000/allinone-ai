@@ -34,7 +34,11 @@ export const resolveShort = (id) => LINKS[id] || null;
 // Rule: search for ANY factual question — people, names, places, news, prices, tech, laws, events…
 // Skip only messages that clearly don't need facts from the web.
 const GREETING = /^\s*(hi+|hello+|hey+|hai|vanakkam|வணக்கம்|thanks?|thank you|nandri|நன்றி|ok(ay)?|bye|good (morning|afternoon|evening|night))[\s!.?]*$/i;
-const TASK = /^\s*(please\s+)?(write|create|build|make|generate|code|implement|refactor|fix|debug|convert|translate|rewrite|rephrase|paraphrase|summari[sz]e|draft|compose|design|format|correct|improve|optimi[sz]e|explain (this|the following|my) code|solve)\b/i;
+// "Do something for me" requests — including common typos ("buld", "bulid", "creat", "mak", "genrate", "wirte")
+const TASK = /^\s*(please\s+|pls\s+|plz\s+|can you\s+|could you\s+|i want( you)? to\s+|i need( you)? to\s+|help me( to)?\s+|let'?s\s+)?(write|wirte|wrte|create|creat|crate|build|buld|bulid|biuld|buil|make|mak|mke|generate|genrate|generte|code|implement|refactor|fix|debug|convert|translate|rewrite|rephrase|paraphrase|summari[sz]e|draft|compose|design|desgin|develop|devlop|format|correct|improve|optimi[sz]e|explain (this|the following|my) code|solve|plan|prepare|list)\b/i;
+// Things people ask the AI to BUILD — never a news search, even without a verb ("portfolio website for me")
+const BUILD_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|app|application|dashboard|component|ui|ux|frontend|front-end|backend|back-end|api|form|login page|signup page|todo|calculator|game|script|program|bot|chatbot|template|layout|navbar|footer|sql query|database schema)\b/i;
+const BUILD_VERB = /\b(build|buld|bulid|biuld|create|creat|make|mak|develop|devlop|design|desgin|code|write|generate|genrate|need|want)\b/i;
 const CREATIVE = /\b(poem|story|kavithai|kadhai|கவிதை|கதை|lyrics|song lyrics|essay|joke|caption|slogan|quote for)\b/i;
 const MATH = /^[\d\s+\-*/().^%=x×÷]+$/;
 // Programming / concept questions the model already knows ("explain closures in JavaScript")…
@@ -43,19 +47,26 @@ const CODING = /\b(javascript|typescript|js|ts|python|java|c\+\+|c#|golang|rust|
 const FRESH = /\b(latest|newest|new in|released?|release date|version|update[sd]?|news|today|current(ly)?|this (week|month|year)|deprecated|20[2-3]\d)\b/i;
 // Small talk & questions about the assistant itself — answer like a person, never search the news for these
 const SMALLTALK = /^\s*(how (are|r) (you|u)|how('s| is) (it going|your day|life)|how do you do|what'?s up|wassup|sup|who are you|what are you|what is your name|what'?s your name|your name|what can you do|what do you do|are you (there|ok|real|human|a bot|an ai)|can you help( me)?|help|nice( to meet you)?|good( job)?|great|cool|awesome|wow|lol|haha|hmm+|yes|no|yeah|nope|sure|i('m| am) (fine|good|ok|okay|bored|tired|happy|sad)|i love you|miss you|good night|see you|eppadi irukeenga|epdi iruka|nalla irukeengala|sapteengala|எப்படி இருக்கீங்க|நலமா|சாப்பிட்டீங்களா)(?=$|[\s!.?,])[\s!.?,஀-௿a-z]*$/i;
-// "you / your" questions are about the assistant, not the world ("what is your favourite colour?")
-const ABOUT_BOT = /\b(you|your|yourself|u)\b/i;
+// Tanglish small talk (Tamil written in English letters): "nee epdi irukka", "neenga eppadi irukeenga", "enna panra", "saptiya"…
+const TANGLISH_TALK = /^\s*((hi|hello|hey|vanakkam|machi|machan|bro|da|di|anna|akka)\s+)*((nee|ni|neenga|nenga|neega|ningal|neengal)\s+)?(((epdi|eppadi|epadi|yepdi|eppidi)\s+(irukka|iruka|irukeenga|irukinga|irukenga|iruke|irukkinga|irukkeenga|irukeengala|irukinga|irukkenga|irukkiya|irukiya|iruki|irukkinga))|(nalla\s+(irukiya|irukkiya|irukeengala|irukingala|irukeenga|irukken|iruken))|(enna\s+(panra|pannura|panringa|pandra|panreenga|pannringa|vishayam|news|aachu))|(sapt(iya|eengala|ingala|achu|tiya|teengala)|saapteengala|saptacha)|(naan\s+nalla\s+(irukken|iruken))|(seri|sari|okay da|ok da|super|nandri|thanks da|romba nandri))(\s+(da|di|bro|machi|machan|pa|ma|anna|akka|ji|sir))?[\s!.?,]*$/i;
+// "you / your" questions are about the assistant, not the world ("what is your favourite colour?") — incl. Tanglish nee/neenga/unga
+const ABOUT_BOT = /\b(you|your|yourself|u|nee|ni|neenga|nenga|unga|un|ungalukku|unakku)\b/i;
 const NAMED = /(^|\s)[A-Z][\w.'-]+|[A-Z]{2,}|[஀-௿]{2,}|\d{3,}/; // a name, acronym, Tamil word or number
 export function needsSearch(q = '') {
   const s = q.trim();
-  if (s.length < 2 || GREETING.test(s) || MATH.test(s) || SMALLTALK.test(s)) return false;
+  if (s.length < 2 || GREETING.test(s) || MATH.test(s) || SMALLTALK.test(s) || TANGLISH_TALK.test(s)) return false;
   if (s.includes('```') || s.length > 1500) return false; // pasted code / long documents
   if (TASK.test(s) || CREATIVE.test(s)) return false;
+  if (BUILD_THING.test(s) && BUILD_VERB.test(s) && !FRESH.test(s)) return false; // "i need a portfolio website", "portfolio website build pannu"
   if (CODING.test(s) && !FRESH.test(s)) return false;
   // Short chit-chat directed at the assistant ("how was your day", "do you like music") → no search
   if (ABOUT_BOT.test(s) && !FRESH.test(s) && !NAMED.test(s.replace(/^\w/, '')) && s.split(/\s+/).length <= 8) return false;
   return true;
 }
+
+// "Build me a website / portfolio / app / page…" (typos OK) — the app then asks for complete code with a live preview
+const WEB_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|dashboard|component|ui|form|login page|signup page|todo|calculator|game|navbar|footer|template|layout|app)\b/i;
+export const isBuildRequest = (q = '') => BUILD_VERB.test(q) && WEB_THING.test(q) && !/\b(python|java\b|c\+\+|c#|golang|rust|php|sql|android|ios|flutter|kotlin|swift)\b/i.test(q);
 
 // ---------- relevance (keeps cards & related topics on-topic) ----------
 const STOP = new Set('the and for with what who whom whose when where which why how are was were this that from into about explain tell give show simple example examples please you your his her their its in on of to is a an me my doing going'.split(' '));
@@ -101,13 +112,116 @@ async function duckduckgo(q) {
 async function wikipedia(q) {
   const lang = /[\u0B80-\u0BFF]/.test(q) ? 'ta' : 'en';
   const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrlimit=5&gsrsearch=${encodeURIComponent(q)}`
-    + `&prop=extracts|info|pageimages|description&inprop=url&exintro=1&explaintext=1&exchars=1500&exlimit=5&piprop=thumbnail&pithumbsize=480&origin=*`;
-  const j = await (await fetch(url, { signal: timeout(6000), headers: { 'User-Agent': 'AllInOneAI/1.0 (local app)' } })).json();
+    + `&prop=extracts|info|pageimages|description|pageprops&ppprop=wikibase_item&inprop=url&exintro=1&explaintext=1&exchars=1500&exlimit=5&piprop=thumbnail&pithumbsize=480&origin=*`;
+  const j = await wmJson(url);
   return Object.values(j.query?.pages || {}).sort((a, b) => a.index - b.index)
     .map((p) => ({
-      kind: 'wiki', title: `${p.title} — Wikipedia`, name: p.title, url: p.fullurl, text: p.extract || '',
-      description: p.description || '', image: p.thumbnail?.source?.replace(/\?utm_.*$/, '') || null,
+      kind: 'wiki', title: `${p.title} — Wikipedia`, name: p.title, url: p.fullurl, text: p.extract || '', lang,
+      description: p.description || '', image: p.thumbnail?.source?.replace(/\?utm_.*$/, '') || null, qid: p.pageprops?.wikibase_item || null,
     }));
+}
+
+// ---------- deeper data for the main topic ----------
+const WUA = { 'User-Agent': 'AllInOneAI/1.0 (local app)' };
+// Wikimedia limits bursts of requests: cache results for a day and retry once when told "too many requests"
+const DAY_CACHE = new Map();
+async function wmJson(url) {
+  const hit = DAY_CACHE.get(url);
+  if (hit && Date.now() - hit.at < 864e5) return hit.data;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await fetch(url, { signal: timeout(6000), headers: WUA });
+    const text = await r.text();
+    if (r.status === 429 || /too many requests/i.test(text.slice(0, 200))) { await new Promise((ok) => setTimeout(ok, 1200)); continue; }
+    const data = JSON.parse(text);
+    DAY_CACHE.set(url, { at: Date.now(), data });
+    if (DAY_CACHE.size > 500) DAY_CACHE.delete(DAY_CACHE.keys().next().value);
+    return data;
+  }
+  throw new Error('Wikimedia rate limit');
+}
+
+// Exact facts from Wikidata (the database behind Wikipedia) — shown word-for-word, no AI in between
+const FACT_PROPS = [
+  ['P1449', 'Also known as'], ['P569', 'Born'], ['P570', 'Died'], ['P19', 'Birthplace'], ['P27', 'Citizenship'],
+  ['P39', 'Positions held'], ['P102', 'Political party'], ['P106', 'Occupation'], ['P108', 'Employer'], ['P69', 'Education'],
+  ['P26', 'Spouse'], ['P22', 'Father'], ['P25', 'Mother'], ['P166', 'Awards'],
+  ['P571', 'Founded'], ['P112', 'Founded by'], ['P159', 'Headquarters'], ['P488', 'Chairperson'], ['P169', 'CEO'],
+  ['P17', 'Country'], ['P36', 'Capital'], ['P6', 'Head of government'], ['P1082', 'Population'],
+  ['P577', 'Released'], ['P57', 'Director'], ['P161', 'Cast'], ['P86', 'Music by'], ['P2047', 'Duration'],
+  ['P348', 'Latest version'], ['P178', 'Developer'], ['P856', 'Website'],
+];
+const fmtTime = (t) => {
+  const m = /^\+?(-?\d+)-(\d\d)-(\d\d)/.exec(t || ''); if (!m) return '';
+  if (m[2] === '00') return m[1];
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, m[3] === '00' ? 1 : +m[3]));
+  return d.toLocaleDateString('en-IN', { ...(m[3] !== '00' && { day: 'numeric' }), month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+async function wikidataFacts(qid, lang = 'en') {
+  const get = wmJson;
+  const ent = Object.values((await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${qid}&props=claims`)).entities || {})[0];
+  const claims = ent?.claims || {};
+  const rows = [];
+  const need = new Set();
+  for (const [p, label] of FACT_PROPS) {
+    let list = (claims[p] || []).filter((c) => c.rank !== 'deprecated' && c.mainsnak?.datavalue);
+    if (list.some((c) => c.rank === 'preferred') && !['P39', 'P166', 'P106', 'P161', 'P69'].includes(p)) list = list.filter((c) => c.rank === 'preferred');
+    if (!list.length) continue;
+    let vals = list.map((c) => {
+      const v = c.mainsnak.datavalue.value;
+      const start = c.qualifiers?.P580?.[0]?.datavalue?.value?.time, end = c.qualifiers?.P582?.[0]?.datavalue?.value?.time;
+      return { v, start, end };
+    });
+    if (['P39', 'P6', 'P488', 'P169', 'P102'].includes(p)) vals.sort((a, b) => String(b.start || '').localeCompare(String(a.start || ''))); // newest first
+    vals = vals.slice(0, p === 'P161' || p === 'P166' ? 4 : p === 'P6' || p === 'P488' || p === 'P169' ? 1 : 5);
+    vals.forEach(({ v }) => v?.id && need.add(v.id)); // only look up names we will actually show
+    rows.push([label, vals, p]);
+  }
+  // Names (labels) of linked items, fetched in batches of 50
+  const labels = {};
+  const ids = [...need];
+  for (let i = 0; i < ids.length; i += 50) {
+    // "mul" = Wikidata's default name for all languages (many newer entries only have that); sitelinks = Wikipedia page title
+    const L = (await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.slice(i, i + 50).join('|')}&props=labels|sitelinks&sitefilter=${lang}wiki|enwiki&languages=${[...new Set([lang, 'en', 'mul'])].join('|')}`)).entities || {};
+    for (const [id, e] of Object.entries(L)) {
+      labels[id] = e.labels?.[lang]?.value || e.labels?.en?.value || e.labels?.mul?.value
+        || e.sitelinks?.[`${lang}wiki`]?.title || e.sitelinks?.enwiki?.title || '';
+    }
+  }
+  const show = ({ v, start, end }) => {
+    let s = v?.id ? labels[v.id] : v?.time ? fmtTime(v.time) : v?.amount ? Number(v.amount).toLocaleString('en-IN') : v?.text || (typeof v === 'string' ? v : '');
+    if (start || end) s += ` (${start ? fmtTime(start).replace(/^\d+ /, '') : '?'} – ${end ? fmtTime(end).replace(/^\d+ /, '') : 'present'})`;
+    return s;
+  };
+  // de-duplicate (same position twice) and drop unresolved ids
+  // drop anything whose name couldn't be looked up (raw "Q123" codes or an empty name before the dates)
+  return rows.map(([label, vals]) => [label, [...new Set(vals.map(show).filter((x) => x && !/^Q\d+\b/.test(x) && !/^\s*\(/.test(x)))].join('; ')])
+    .filter(([, v]) => v).map(([label, value]) => ({ label, value }));
+}
+
+// The most relevant parts of the full article (career, politics, recent years…), not just the intro
+async function articleDetails(page, q) {
+  const u = `https://${page.lang || 'en'}.wikipedia.org/w/api.php?action=query&format=json&titles=${encodeURIComponent(page.name)}&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1`;
+  const j = await wmJson(u);
+  const full = Object.values(j.query?.pages || {})[0]?.extract || '';
+  const SKIP_SEC = /^(filmography|discography|bibliography|references|notes|citations|external links|see also|further reading|sources|gallery|works|awards and nominations)$/i;
+  const sections = full.split(/\n(?==+ )/).map((block) => {
+    const m = /^(=+) (.+?) =+\n/.exec(block);
+    return { title: m ? m[2] : 'Introduction', body: (m ? block.slice(m[0].length) : block).trim() };
+  }).filter((s) => s.body && !SKIP_SEC.test(s.title) && s.title !== 'Introduction');
+  const keys = stems(q);
+  const year = new Date().getFullYear();
+  const scored = sections.map((s, i) => {
+    let score = keys.filter((k) => stems(`${s.title} ${s.body.slice(0, 600)}`).includes(k)).length;
+    if (/present|current|recent|political|career|personal|biography|history|overview|life/i.test(s.title)) score += 2;
+    if (new RegExp(`${year}|${year - 1}`).test(s.title)) score += 3; // newest period first
+    return { ...s, score, i };
+  }).sort((a, b) => b.score - a.score).slice(0, 3).sort((a, b) => a.i - b.i);
+  let out = '';
+  for (const s of scored) {
+    const para = s.body.split('\n').filter((p) => p.length > 60).slice(0, 2).join(' ');
+    out += `\n${s.title}: ${para.slice(0, 700)}`;
+  }
+  return out.trim().slice(0, 1800);
 }
 
 // Google News RSS — free, no key, newest articles with dates (India edition; Tamil edition for Tamil queries)
@@ -167,6 +281,15 @@ export async function webSearch(query, keys = {}) {
   const qKeys = stems(q);
   const onTopic = wiki.filter((w) => mentions(`${w.name} ${w.description}`, qKeys) || mentions(w.text.slice(0, 400), qKeys));
   const main = onTopic[0];
+  // Deeper, exact data for the main topic (in parallel, ~0.5–1 s): Wikidata facts + relevant article sections
+  if (main) {
+    const [facts, details] = await Promise.all([
+      main.qid ? wikidataFacts(main.qid, main.lang).catch(() => []) : [],
+      articleDetails(main, q).catch(() => ''),
+    ]);
+    main.facts = facts;
+    main.details = details;
+  }
   // Related = other pages that mention the question or the main topic's name (e.g. "Kalam")
   const mainKeys = main ? stems(main.name.replace(/\(.*?\)/g, '')) : [];
   const related = onTopic.slice(1).filter((w) => mentions(`${w.name} ${w.description} ${w.text}`, [...qKeys, ...mainKeys]));
@@ -203,7 +326,11 @@ function compact(r, i) {
   if (isNews) return r.text.replace(/^News, published /, 'News ').slice(0, 220); // date + source + headline
   const max = isWiki ? (i === 0 ? BUDGET.wikiFirst : BUDGET.wiki) : BUDGET.web;
   const t = r.text.length > max ? `${r.text.slice(0, max).replace(/\s+\S*$/, '')}…` : r.text;
-  return `${r.title.replace(/ — Wikipedia$/, '')} (${isWiki ? 'Wikipedia' : new URL(r.url).hostname.replace(/^www\./, '')}): ${t}`;
+  let out = `${r.title.replace(/ — Wikipedia$/, '')} (${isWiki ? 'Wikipedia' : new URL(r.url).hostname.replace(/^www\./, '')}): ${t}`;
+  // Main topic: exact database facts + the relevant article sections (career, politics, recent years…)
+  if (r.facts?.length) out += `\nKey facts (Wikidata): ${r.facts.map((f) => `${f.label}: ${f.value}`).join(' | ')}`;
+  if (r.details) out += `\nMore from the article:\n${r.details}`;
+  return out;
 }
 
 /**

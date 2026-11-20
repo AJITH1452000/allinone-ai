@@ -166,9 +166,25 @@ export default function App() {
     // "My model" = a base model + your own instructions, knowledge and temperature
     const mine = settings.model?.provider === 'mine' ? settings.myModels.find((x) => x.id === settings.model.id) : null;
     if (settings.model?.provider === 'mine' && !mine?.base) return;
-    const model = mine ? { ...mine.base, mine: `${mine.icon} ${mine.name}` } : settings.model;
+    let model = mine ? { ...mine.base, mine: `${mine.icon} ${mine.name}` } : settings.model;
+    // A photo needs a model that can see. Text-only models (e.g. Learn Lite) → use a vision model for this message.
+    let note = null;
+    const lastUser = history[history.length - 1];
+    if (lastUser?.images?.length) {
+      const cur = models.find((m) => m.provider === model.provider && m.id === model.id);
+      if (cur && !cur.vision) {
+        const v = models.find((m) => m.own && m.vision) || models.find((m) => m.vision && m.free) || models.find((m) => m.vision);
+        const name = (m) => (m.label || m.id).replace(/:latest$/, '');
+        if (v) {
+          model = { provider: v.provider, id: v.id, mine: model.mine };
+          note = `${name(cur)} can't see images, so ${name(v)} answered this one.`;
+        } else {
+          note = `${name(cur)} can't see images. Pull a vision model (ollama pull gemma3:4b) or add a Gemini key.`;
+        }
+      }
+    }
     const asstId = uid();
-    updateChat(chatId, (c) => ({ ...c, messages: [...history, { id: asstId, role: 'assistant', content: '', reasoning: '', model }] }));
+    updateChat(chatId, (c) => ({ ...c, messages: [...history, { id: asstId, role: 'assistant', content: '', reasoning: '', model, note }] }));
     setStreamingId(asstId);
     stickRef.current = true;
     const ctrl = new AbortController();
@@ -203,6 +219,7 @@ export default function App() {
         onSources: (s) => { sources = s; schedule(); },
         onCost: (c) => { cost = c; schedule(); },
         onSearch: (s) => { search = s; schedule(); },
+        onNote: (n) => { note = note ? `${note} ${n}` : n; updateChat(chatId, (c) => ({ ...c, messages: c.messages.map((m) => (m.id === asstId ? { ...m, note } : m)) })); },
         onText: (t) => { text += t; schedule(); },
         onReasoning: (t) => { reasoning += t; schedule(); },
         onUsage: (u) => { usage = u; },

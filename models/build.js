@@ -13,7 +13,7 @@ const family = JSON.parse(fs.readFileSync(path.join(dir, 'family.json'), 'utf8')
 const winExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe');
 const OLLAMA = os.platform() === 'win32' && fs.existsSync(winExe) ? winExe : 'ollama';
 
-const TIERS = ['lite', 'pro', 'max'];
+const TIERS = ['lite', 'pro', 'max', 'code'];
 const pick = process.argv.slice(2);
 const todo = pick.length ? pick : TIERS;
 const run = (...args) => spawnSync(OLLAMA, args, { stdio: 'inherit' }).status === 0;

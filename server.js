@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { IS_VERCEL, KEYS_FILE } from './paths.js';
 import * as kb from './kb.js';
 import * as usage from './usage.js';
-import { webSearch, needsSearch, withResults, resolveShort, shortUrl } from './search.js';
+import { webSearch, needsSearch, withResults, resolveShort, shortUrl, isBuildRequest } from './search.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +70,7 @@ function loadFamily() {
     [`${f}-max`]: { label: `${FAMILY.name} Max`, desc: 'Most capable · coding & reasoning', rank: 0, vision: false, fast: false },
     [`${f}-pro`]: { label: `${FAMILY.name} Pro`, desc: 'Balanced · everyday · sees images', rank: 1, vision: true, fast: false },
     [`${f}-lite`]: { label: `${FAMILY.name} Lite`, desc: 'Fastest · quick answers', rank: 2, vision: false, fast: true },
+    [`${f}-code`]: { label: `${FAMILY.name} Code`, desc: 'Coding specialist · builds apps & websites', rank: 3, vision: false, fast: false },
   };
 }
 loadFamily();
@@ -314,8 +315,8 @@ app.post('/api/warm', async (req, res) => {
 const textOf = (m) => (typeof m?.content === 'string' ? m.content : (m?.content || []).filter((p) => p.type === 'text').map((p) => p.text).join(' '));
 
 app.post('/api/chat', async (req, res) => {
-  const { provider, model, messages = [], temperature, maxTokens, kbId, webSearch: webSearchMode = 'auto' } = req.body;
-  let { system } = req.body;
+  const { provider, messages = [], temperature, maxTokens, kbId, webSearch: webSearchMode = 'auto' } = req.body;
+  let { system, model } = req.body;
   const p = PROVIDERS[provider];
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
@@ -326,6 +327,19 @@ app.post('/api/chat', async (req, res) => {
 
   const ctrl = new AbortController();
   res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
+
+  // Coding on Learn Lite (1B, weak at code) → hand the message to the coding specialist, Learn Code, and say so.
+  // (Done before the built-in instructions are attached, so Learn Code uses its own.)
+  {
+    const asked = textOf(messages[messages.length - 1]);
+    const codeModel = `${FAMILY.id}-code:latest`;
+    const isCode = isBuildRequest(asked) || /```|\b(code|function|component|bug|error|fix|debug|react|javascript|typescript|python|html|css|api|sql)\b/i.test(asked);
+    if (provider === 'ollama' && String(model).startsWith(`${FAMILY.id}-lite`) && isCode
+      && (cache.data?.models || []).some((m) => m.id === codeModel)) {
+      model = codeModel;
+      send({ t: 'note', v: `${FAMILY.name} Lite isn't strong at code, so ${FAMILY.name} Code answered this one.` });
+    }
+  }
 
   // Your own Learn models: a system message would REPLACE the instructions built into the model,
   // so we put the built-in instructions first and add the app's extras (name, language…) after them.
@@ -354,12 +368,27 @@ app.post('/api/chat', async (req, res) => {
 
   // Web search: 'on' = always, 'auto' = when the question needs fresh/verifiable facts, 'off' = never
   const lastText = textOf(messages[messages.length - 1]);
-  if (webSearchMode === 'on' || (webSearchMode === 'auto' && needsSearch(lastText))) {
+  // "Build me a portfolio website" → ask for real, runnable code the app can preview (like Claude's artifacts)
+  if (isBuildRequest(lastText) && typeof msgs[msgs.length - 1]?.content === 'string') {
+    const last = msgs[msgs.length - 1];
+    // Default stack (system prompt rule 4): React + MUI. Plain HTML only when the user asks for HTML.
+    const wantsHtml = /\b(html|plain css|vanilla|no react|without react|static page)\b/i.test(lastText);
+    const how = wantsHtml
+      ? 'ONE complete single-file HTML page (HTML + CSS + JavaScript) wrapped in <artifact identifier="page" type="text/html" title="Page name">…</artifact>'
+      : 'ONE complete React component file (JSX, functional component with hooks, MUI for the UI, all imports included, one default export) wrapped in <artifact identifier="app" type="application/react" title="Component name">…</artifact>';
+    msgs = [...msgs.slice(0, -1), { ...last, content: `${last.content}\n\n(Build it now: ${how}. Include everything I asked for and nothing extra; responsive; no TODOs or placeholders in the code. After the code: at most 1–3 short lines.)` }];
+  }
+
+  // A photo or an attached file is the topic itself — never search the web for "Describe this image"
+  const lastMsg = messages[messages.length - 1];
+  const hasImage = Array.isArray(lastMsg?.content) && lastMsg.content.some((p) => p.type === 'image_url');
+  const hasFile = /\n--- File: /.test(lastText);
+  if (!hasImage && !hasFile && (webSearchMode === 'on' || (webSearchMode === 'auto' && needsSearch(lastText)))) {
     send({ t: 'searching', v: lastText.slice(0, 120) });
     const found = await webSearch(lastText, searchKeys()).catch(() => ({ results: [] }));
     // Everything the app needs for an instant knowledge card (photo, summary, dated news, related topics)
-    const card = ({ kind, title, name, url, description, image, date, source, text }) =>
-      ({ kind, title, name, url, short: shortUrl(url), description, image, date, source, text: kind === 'wiki' ? text : undefined });
+    const card = ({ kind, title, name, url, description, image, date, source, text, facts, qid }) =>
+      ({ kind, title, name, url, short: shortUrl(url), description, image, date, source, text: kind === 'wiki' ? text : undefined, facts, qid });
     send({ t: 'search', v: { engine: found.engine, results: (found.results || []).map(card), related: (found.related || []).map(card) } });
     // Always attach: the results (placed before the question), or a "nothing found → don't guess" note
     const last = msgs[msgs.length - 1];
