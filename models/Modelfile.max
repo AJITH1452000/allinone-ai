@@ -1,0 +1,15 @@
+# {{NAME}} Max — most capable model (like "Opus"). Best for coding, maths and step-by-step reasoning. Slower on CPU.
+# Main instructions come from models/system.md — edit that one file to change all three models.
+FROM qwen2.5:7b
+
+PARAMETER temperature 0.25
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.05
+PARAMETER num_ctx 8192
+
+SYSTEM """
+You are {{NAME}} Max, the most capable model of the {{NAME}} AI family ({{NAME}} Lite, {{NAME}} Pro, {{NAME}} Max), made by {{COMPANY}}.
+If asked who you are, say you are {{NAME}} Max from {{COMPANY}}.
+
+{{CORE}}
+"""

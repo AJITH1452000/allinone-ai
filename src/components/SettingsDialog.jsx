@@ -1,0 +1,272 @@
+import { useEffect, useRef, useState } from 'react';
+import {
+  Box, Button, ButtonBase, Dialog, Divider, FormControlLabel, IconButton, MenuItem, Select, Slider, Switch, TextField, Typography,
+  ToggleButton, ToggleButtonGroup, useMediaQuery,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import TuneIcon from '@mui/icons-material/Tune';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
+import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { LANG_MODES } from '../lib/personas';
+
+export const SETTINGS_TABS = [
+  { id: 'general', label: 'General', Icon: TuneIcon },
+  { id: 'profile', label: 'Profile', Icon: PersonOutlineIcon },
+  { id: 'models', label: 'Models & tokens', Icon: AutoAwesomeOutlinedIcon },
+  { id: 'keys', label: 'API keys', Icon: KeyOutlinedIcon },
+  { id: 'data', label: 'Data controls', Icon: StorageOutlinedIcon },
+  { id: 'shortcuts', label: 'Shortcuts', Icon: KeyboardOutlinedIcon },
+  { id: 'about', label: 'About', Icon: InfoOutlinedIcon },
+];
+
+export const SHORTCUTS = [
+  ['New chat', 'Ctrl + Shift + O'],
+  ['Open settings', 'Ctrl + Shift + ,'],
+  ['Search chats', 'Ctrl + K'],
+  ['Toggle sidebar', 'Ctrl + B'],
+  ['Show shortcuts', 'Ctrl + /'],
+  ['Send message', 'Enter'],
+  ['New line', 'Shift + Enter'],
+  ['Stop generating', 'Esc'],
+];
+
+function Row({ title, desc, children, column }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: column ? 'column' : { xs: 'column', sm: 'row' }, alignItems: column ? 'stretch' : { sm: 'center' },
+      gap: column ? 1 : { xs: 1, sm: 3 }, py: 2, borderBottom: 1, borderColor: 'divider', '&:last-of-type': { borderBottom: 0 } }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: 14, fontWeight: 500 }}>{title}</Typography>
+        {desc && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.25 }}>{desc}</Typography>}
+      </Box>
+      <Box sx={{ flexShrink: 0 }}>{children}</Box>
+    </Box>
+  );
+}
+
+/** Optional search API keys. Without them: DuckDuckGo (may rate-limit) + Wikipedia. */
+function SearchKeys() {
+  const [have, setHave] = useState({});
+  const [val, setVal] = useState({ tavily: '', brave: '' });
+  const [msg, setMsg] = useState({});
+  const [busy, setBusy] = useState('');
+  const load = () => fetch('/api/search-keys').then((r) => r.json()).then(setHave).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const save = async (engine, key) => {
+    setBusy(engine); setMsg((m) => ({ ...m, [engine]: '' }));
+    const r = await fetch('/api/search-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ engine, key }) });
+    const j = await r.json().catch(() => ({}));
+    setMsg((m) => ({ ...m, [engine]: r.ok ? (key ? '✓ Connected' : 'Removed') : j.error }));
+    setBusy(''); setVal((v) => ({ ...v, [engine]: '' })); load();
+  };
+  return (
+    <>
+      {[['tavily', 'Tavily', 'Best for AI answers · free monthly credits', 'https://app.tavily.com'],
+        ['brave', 'Brave Search', 'Independent web index · free plan', 'https://api-dashboard.search.brave.com']].map(([id, name, desc, url]) => (
+        <Row key={id} column title={<>{name} {have[id] && <Typography component="span" sx={{ fontSize: 12, color: 'success.main', ml: 1 }}>Connected · {have[id]}</Typography>}</>}
+          desc={<>{desc} — <a href={url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>get a key</a></>}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField size="small" fullWidth type="password" placeholder={have[id] ? 'Paste a new key to replace' : 'Paste API key'}
+              value={val[id]} onChange={(e) => setVal((v) => ({ ...v, [id]: e.target.value }))} />
+            <Button variant="contained" disableElevation disabled={!val[id] || busy === id} onClick={() => save(id, val[id])}>{busy === id ? '…' : 'Save'}</Button>
+            {have[id] && <Button color="inherit" onClick={() => save(id, '')}>Remove</Button>}
+          </Box>
+          {msg[id] && <Typography sx={{ fontSize: 12.5, color: msg[id].startsWith('✓') || msg[id] === 'Removed' ? 'success.main' : 'error.main' }}>{msg[id]}</Typography>}
+        </Row>
+      ))}
+      <Typography sx={{ fontSize: 12, color: 'text.secondary', pt: 1 }}>
+        Without a key, the app uses DuckDuckGo (can be rate-limited) and Wikipedia (English & Tamil). For live prices, news and latest versions, add a Tavily or Brave key.
+      </Typography>
+    </>
+  );
+}
+
+const Kbd = ({ children }) => (
+  <Box component="kbd" sx={{ px: 0.75, py: 0.25, borderRadius: '6px', border: 1, borderColor: 'divider', fontSize: 12, fontFamily: 'inherit', bgcolor: 'background.default' }}>
+    {children}
+  </Box>
+);
+
+export default function SettingsDialog({ open, onClose, tab: initialTab = 'general', settings, setSettings, chats, onClearAll, onImport, onOpenKeys, onOpenUsage }) {
+  const [tab, setTab] = useState(initialTab);
+  const [msg, setMsg] = useState('');
+  const fileRef = useRef();
+  const full = useMediaQuery('(max-width:700px)');
+  useEffect(() => { if (open) { setTab(initialTab); setMsg(''); } }, [open, initialTab]);
+  const set = (k, v) => setSettings((s) => ({ ...s, [k]: v }));
+  const setProfile = (k, v) => setSettings((s) => ({ ...s, profile: { ...s.profile, [k]: v } }));
+  const p = settings.profile || {};
+
+  const exportAll = () => {
+    const blob = new Blob([JSON.stringify({ app: 'all-in-one-ai', exportedAt: new Date().toISOString(), chats, settings: { ...settings } }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `all-in-one-ai-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const importAll = async (file) => {
+    try {
+      const j = JSON.parse(await file.text());
+      if (!Array.isArray(j.chats)) throw new Error('Not a backup file');
+      onImport(j.chats); setMsg(`Imported ${j.chats.length} chats`);
+    } catch (e) { setMsg(`Import failed: ${e.message}`); }
+  };
+
+  const content = {
+    general: (
+      <>
+        <Row title="Appearance" desc="Light, dark, or follow your system.">
+          <ToggleButtonGroup size="small" exclusive value={settings.theme} onChange={(_, v) => v && set('theme', v)}>
+            <ToggleButton value="light">Light</ToggleButton><ToggleButton value="dark">Dark</ToggleButton><ToggleButton value="system">System</ToggleButton>
+          </ToggleButtonGroup>
+        </Row>
+        <Row title="Reply language" desc="The language the AI answers in.">
+          <Select size="small" value={settings.lang} onChange={(e) => set('lang', e.target.value)} sx={{ minWidth: 150 }}>
+            {LANG_MODES.map((l) => <MenuItem key={l.id} value={l.id}>{l.id === 'auto' ? 'Auto (match me)' : l.label}</MenuItem>)}
+          </Select>
+        </Row>
+        <Row title="Chat font size">
+          <ToggleButtonGroup size="small" exclusive value={settings.fontSize || 'default'} onChange={(_, v) => v && set('fontSize', v)}>
+            <ToggleButton value="small">Small</ToggleButton><ToggleButton value="default">Default</ToggleButton><ToggleButton value="large">Large</ToggleButton>
+          </ToggleButtonGroup>
+        </Row>
+        <Row title="Send with Enter" desc="Off: Enter adds a new line and Ctrl + Enter sends.">
+          <Switch checked={settings.enterToSend !== false} onChange={(e) => set('enterToSend', e.target.checked)} />
+        </Row>
+        <Row title="Show only free models" desc="Hide paid models in the model picker.">
+          <Switch checked={!!settings.freeOnly} onChange={(e) => set('freeOnly', e.target.checked)} />
+        </Row>
+      </>
+    ),
+    profile: (
+      <>
+        <Row title="Full name">
+          <TextField size="small" value={p.name || ''} onChange={(e) => setProfile('name', e.target.value)} placeholder="Your name" sx={{ width: 240 }} />
+        </Row>
+        <Row title="What should the AI call you?">
+          <TextField size="small" value={p.callMe || ''} onChange={(e) => setProfile('callMe', e.target.value)} placeholder="e.g. Ajith" sx={{ width: 240 }} />
+        </Row>
+        <Row title="What best describes your work?">
+          <Select size="small" displayEmpty value={p.work || ''} onChange={(e) => setProfile('work', e.target.value)} sx={{ width: 240 }}>
+            <MenuItem value="">Select…</MenuItem>
+            {['Software developer', 'Student', 'Teacher', 'Designer', 'Business owner', 'Data / AI', 'Writer / Content creator', 'Government exam aspirant', 'Other'].map((w) => <MenuItem key={w} value={w}>{w}</MenuItem>)}
+          </Select>
+        </Row>
+        <Row column title="Personal preferences" desc="What should the AI keep in mind in every chat? (added to every conversation)">
+          <TextField fullWidth multiline minRows={4} value={settings.customSystem || ''} onChange={(e) => set('customSystem', e.target.value)}
+            placeholder="e.g. I'm a React developer from Chennai. Keep answers short and give full code. Explain in Tanglish when I ask in Tanglish." />
+        </Row>
+      </>
+    ),
+    models: (
+      <>
+        <Row column title={`Creativity: ${settings.temperature}`} desc="Lower = precise and consistent. Higher = more creative.">
+          <Slider min={0} max={1.5} step={0.1} value={settings.temperature} onChange={(_, v) => set('temperature', v)}
+            marks={[{ value: 0, label: 'Precise' }, { value: 0.7, label: 'Balanced' }, { value: 1.5, label: 'Creative' }]} sx={{ mx: 1, width: 'auto' }} />
+        </Row>
+        <Row column title={`Max reply length: ${settings.maxTokens} tokens`} desc="Caps how long one answer can be.">
+          <Slider min={512} max={8192} step={256} value={settings.maxTokens} onChange={(_, v) => set('maxTokens', v)}
+            marks={[{ value: 1024, label: 'Short' }, { value: 2048, label: 'Normal' }, { value: 8192, label: 'Long code' }]} sx={{ mx: 1, width: 'auto' }} />
+        </Row>
+        <Row column title={`Chat memory: last ${settings.memory} messages`} desc="Only these recent messages are sent each time. Old images, files and code are trimmed automatically.">
+          <Slider min={2} max={40} step={2} value={settings.memory} onChange={(_, v) => set('memory', v)}
+            marks={[{ value: 4, label: 'Cheap' }, { value: 10, label: 'Balanced' }, { value: 40, label: 'Full' }]} sx={{ mx: 1, width: 'auto' }} />
+        </Row>
+        <Row title="Short answers" desc="Asks the model to skip filler — uses fewer tokens.">
+          <Switch checked={!!settings.concise} onChange={(e) => set('concise', e.target.checked)} />
+        </Row>
+        <Row title="Usage & billing" desc="Tokens, cost, credits and monthly budget.">
+          <Button variant="outlined" color="inherit" size="small" onClick={onOpenUsage} sx={{ borderColor: 'divider' }}>Open</Button>
+        </Row>
+      </>
+    ),
+    keys: (
+      <>
+        <Typography sx={{ fontSize: 13.5, color: 'text.secondary', py: 2 }}>
+          Connect Google Gemini, Claude, ChatGPT (OpenAI), OpenRouter, Groq and more. Keys are tested, then stored only on this computer.
+        </Typography>
+        <Row title="Manage API keys & custom APIs">
+          <Button variant="contained" disableElevation size="small" onClick={onOpenKeys}>Open</Button>
+        </Row>
+        <Row title="Your own Learn models" desc="Runs free on your PC with Ollama — no key needed. Rebuild with: npm run build-models" />
+        <Typography sx={{ fontSize: 14, fontWeight: 600, pt: 3, pb: 0.5 }}>Web search (for accurate, up-to-date answers)</Typography>
+        <Row title="When to search">
+          <ToggleButtonGroup size="small" exclusive value={settings.webSearch || 'auto'} onChange={(_, v) => v && set('webSearch', v)}>
+            <ToggleButton value="auto">Auto</ToggleButton><ToggleButton value="on">Always</ToggleButton><ToggleButton value="off">Off</ToggleButton>
+          </ToggleButtonGroup>
+        </Row>
+        <SearchKeys />
+      </>
+    ),
+    data: (
+      <>
+        <Row title="Export all chats" desc="Download a backup file of every chat (JSON).">
+          <Button variant="outlined" color="inherit" size="small" onClick={exportAll} sx={{ borderColor: 'divider' }}>Export</Button>
+        </Row>
+        <Row title="Import chats" desc="Restore from a backup file. Imported chats are added to your list.">
+          <Button variant="outlined" color="inherit" size="small" onClick={() => fileRef.current.click()} sx={{ borderColor: 'divider' }}>Import</Button>
+          <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { e.target.files[0] && importAll(e.target.files[0]); e.target.value = ''; }} />
+        </Row>
+        <Row title="Where your data lives" desc="Chats & settings: this browser. API keys, your files and usage: data/ and keys.json next to server.js. Nothing is sent anywhere except to the AI provider you choose." />
+        <Row title="Delete all chats" desc="This cannot be undone.">
+          <Button variant="outlined" color="error" size="small" onClick={() => { if (confirm('Delete ALL chats? This cannot be undone.')) { onClearAll(); setMsg('All chats deleted'); } }}>Delete all</Button>
+        </Row>
+        {msg && <Typography sx={{ fontSize: 13, color: msg.includes('failed') ? 'error.main' : 'success.main', pt: 1 }}>{msg}</Typography>}
+      </>
+    ),
+    shortcuts: (
+      <Box sx={{ py: 1 }}>
+        {SHORTCUTS.map(([label, keys]) => (
+          <Box key={label} sx={{ display: 'flex', alignItems: 'center', py: 1.25, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography sx={{ flex: 1, fontSize: 14 }}>{label}</Typography>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>{keys.split(' + ').map((k) => <Kbd key={k}>{k}</Kbd>)}</Box>
+          </Box>
+        ))}
+      </Box>
+    ),
+    about: (
+      <>
+        <Row title="All-in-One AI" desc="One app for your own Learn models, local Ollama models, Google Gemini, Claude, ChatGPT and more." />
+        <Row title="Your models" desc="Learn Lite · Learn Pro · Learn Max — built from models/Modelfile.* and models/system.md." />
+        <Row title="Privacy" desc="Runs on your computer. Chats stay in your browser; local models never send data anywhere." />
+      </>
+    ),
+  };
+
+  const current = SETTINGS_TABS.find((t) => t.id === tab) || SETTINGS_TABS[0];
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={full}
+      PaperProps={{ sx: { borderRadius: full ? 0 : '20px', height: full ? '100%' : 'min(640px, 88vh)', overflow: 'hidden' } }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, height: '100%' }}>
+        {/* Left navigation */}
+        <Box sx={{ width: { sm: 210 }, flexShrink: 0, p: 1.5, borderRight: { sm: 1 }, borderBottom: { xs: 1, sm: 0 }, borderColor: 'divider', bgcolor: 'background.side' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', px: 1, pb: 1.5 }}>
+            <Typography sx={{ flex: 1, fontSize: 17, fontWeight: 650 }}>Settings</Typography>
+            <IconButton size="small" onClick={onClose} sx={{ display: { sm: 'none' } }}><CloseIcon fontSize="small" /></IconButton>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'row', sm: 'column' }, gap: 0.25, overflowX: 'auto' }}>
+            {SETTINGS_TABS.map(({ id, label, Icon }) => (
+              <ButtonBase key={id} onClick={() => setTab(id)} sx={{
+                justifyContent: 'flex-start', gap: 1.25, px: 1.25, py: 0.9, borderRadius: '10px', fontSize: 13.5, flexShrink: 0,
+                fontWeight: tab === id ? 600 : 400, bgcolor: tab === id ? 'action.selected' : 'transparent', '&:hover': { bgcolor: 'action.hover' },
+              }}>
+                <Icon sx={{ fontSize: 18, color: 'text.secondary' }} /> {label}
+              </ButtonBase>
+            ))}
+          </Box>
+        </Box>
+        {/* Content */}
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', px: 3, pt: 2.5, pb: 0.5 }}>
+            <Typography sx={{ flex: 1, fontSize: 17, fontWeight: 600 }}>{current.label}</Typography>
+            <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+          </Box>
+          <Divider sx={{ display: { xs: 'none', sm: 'block' }, mx: 3 }} />
+          <Box sx={{ flex: 1, overflowY: 'auto', px: 3, pb: 3 }}>{content[tab]}</Box>
+        </Box>
+      </Box>
+    </Dialog>
+  );
+}
