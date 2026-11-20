@@ -3,6 +3,8 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
+import { IS_VERCEL, KEYS_FILE } from './paths.js';
 import * as kb from './kb.js';
 import * as usage from './usage.js';
 import { webSearch, needsSearch, withResults, resolveShort } from './search.js';
@@ -26,13 +28,14 @@ const PROVIDERS = {
   deepseek:   { name: 'DeepSeek', tag: 'Paid · cheap', env: 'DEEPSEEK_API_KEY', base: 'https://api.deepseek.com/v1', url: 'https://platform.deepseek.com/api_keys' },
 };
 
-const KEYS_FILE = path.join(__dirname, 'keys.json');
+// KEYS_FILE comes from paths.js (keys.json locally, /tmp on Vercel)
 const readSaved = () => { try { return JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8')); } catch { return {}; } };
 function applyKeys() {
   const saved = readSaved();
   for (const [id, p] of Object.entries(PROVIDERS)) {
     if (id === 'pollinations') { p.key = process.env.POLLINATIONS === 'off' ? '' : (process.env.POLLINATIONS_API_KEY || 'none'); p.noAuth = !process.env.POLLINATIONS_API_KEY; }
-    else if (id === 'ollama') p.key = 'ollama';
+    // Ollama runs on your PC — on Vercel it's only used if OLLAMA_URL points to a public address
+    else if (id === 'ollama') p.key = IS_VERCEL && !process.env.OLLAMA_URL ? '' : 'ollama';
     else if (!p.custom) p.key = (saved[id] || process.env[p.env] || '').trim();
   }
   // Custom OpenAI-compatible endpoints added from the app (LM Studio, vLLM, Together, your own server…)
@@ -115,6 +118,36 @@ let lastStatus = [];
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
+
+// ---------- Live-site protection ----------
+// 1) Optional password: set APP_PASSWORD (e.g. in Vercel → Settings → Environment Variables).
+const PASS = process.env.APP_PASSWORD || '';
+const token = PASS ? crypto.createHash('sha256').update(`aio:${PASS}`).digest('hex') : '';
+const cookieOf = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((c) => c.trim().split('=').map(decodeURIComponent)).filter((x) => x[0]));
+app.get('/api/auth', (req, res) => res.json({ required: !!PASS, ok: !PASS || cookieOf(req).aio_auth === token }));
+app.post('/api/login', (req, res) => {
+  if (!PASS) return res.json({ ok: true });
+  const given = String(req.body?.password || '');
+  const ok = given.length === PASS.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(PASS));
+  if (!ok) return res.status(401).json({ error: 'Wrong password' });
+  res.setHeader('Set-Cookie', `aio_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}${IS_VERCEL ? '; Secure' : ''}`);
+  res.json({ ok: true });
+});
+app.use('/api', (req, res, next) => {
+  if (!PASS || cookieOf(req).aio_auth === token) return next();
+  res.status(401).json({ error: 'Password required', auth: true });
+});
+// 2) On a public deployment, keys/providers can't be changed from the browser (set them as environment variables instead).
+const LOCKED = IS_VERCEL && process.env.ALLOW_KEY_EDIT !== '1';
+const lock = (req, res, next) => (LOCKED
+  ? res.status(403).json({ error: 'On the live site, API keys are set in Vercel → Settings → Environment Variables (then redeploy).' })
+  : next());
+app.post('/api/keys', lock);
+app.post('/api/custom-provider', lock);
+app.delete('/api/custom-provider/:id', lock);
+app.post('/api/search-keys', lock);
+app.post('/api/billing', lock);
+app.delete('/api/usage', lock);
 
 app.get('/api/models', async (req, res) => {
   if (!req.query.refresh && cache.data && Date.now() - cache.at < 10 * 60 * 1000) return res.json(cache.data);
@@ -448,11 +481,15 @@ app.get('/api/balances', async (req, res) => {
   res.json(out);
 });
 
-app.use(express.static(path.join(__dirname, 'dist')));
-app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
+if (!IS_VERCEL) { // on Vercel the built site is served by Vercel's CDN
+  app.use(express.static(path.join(__dirname, 'dist')));
+  app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'dist', 'index.html')));
+}
+
+export default app; // used by api/index.js on Vercel
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+if (!IS_VERCEL) app.listen(PORT, () => {
   console.log(`\n  All-in-One AI API → http://localhost:${PORT}`);
   console.log('  Providers:', Object.keys(PROVIDERS).filter((k) => PROVIDERS[k].key).join(', '), '\n');
 });

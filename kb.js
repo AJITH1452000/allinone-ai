@@ -4,9 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { DATA_DIR } from './paths.js';
 
 const require = createRequire(import.meta.url);
-const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'kb');
+const DIR = path.join(DATA_DIR, 'kb');
 fs.mkdirSync(DIR, { recursive: true });
 
 const OLLAMA = (process.env.OLLAMA_URL || 'http://localhost:11434/v1').replace(/\/v1\/?$/, '');

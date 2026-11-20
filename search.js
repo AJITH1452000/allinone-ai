@@ -13,7 +13,8 @@ const timeout = (ms) => AbortSignal.timeout(ms);
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-const LINKS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'links.json');
+import { DATA_DIR } from './paths.js';
+const LINKS_FILE = path.join(DATA_DIR, 'links.json');
 let LINKS = {};
 try { LINKS = JSON.parse(fs.readFileSync(LINKS_FILE, 'utf8')); } catch {}
 const BY_URL = new Map(Object.entries(LINKS).map(([k, v]) => [v, k]));

@@ -3,8 +3,9 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { DATA_DIR } from './paths.js';
 
-const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
+const DIR = DATA_DIR;
 fs.mkdirSync(DIR, { recursive: true });
 const LOG = path.join(DIR, 'usage.jsonl');
 const BILL = path.join(DIR, 'billing.json');
