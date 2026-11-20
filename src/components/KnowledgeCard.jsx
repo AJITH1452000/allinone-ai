@@ -115,7 +115,7 @@ export default function KnowledgeCard({ search, onAsk }) {
       )}
 
       {!main && !news.length && !web.length && (
-        <Typography sx={{ p: 2, fontSize: 13.5, color: 'text.secondary' }}>No verified real-time information found for this query.</Typography>
+        <Typography sx={{ p: 2, fontSize: 13.5, color: 'text.secondary' }}>I could not find verified, accurate information on that specific topic.</Typography>
       )}
     </Box>
   );

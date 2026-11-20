@@ -3,6 +3,8 @@ import { Box, Paper, TextField, IconButton, Tooltip, Chip, Menu, MenuItem, ListI
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import StopIcon from '@mui/icons-material/Stop';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import AddIcon from '@mui/icons-material/Add';
+import CheckIcon from '@mui/icons-material/Check';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
 import CloseIcon from '@mui/icons-material/Close';
@@ -33,6 +35,7 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
   const [files, setFiles] = useState([]);
   const [listening, setListening] = useState(false);
   const [personaMenu, setPersonaMenu] = useState(null);
+  const [plusMenu, setPlusMenu] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef();
   const recRef = useRef(null);
@@ -114,13 +117,12 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
         <input ref={fileRef} type="file" multiple hidden
           accept="image/*,.txt,.md,.js,.jsx,.ts,.tsx,.json,.css,.html,.py,.java,.c,.cpp,.csv,.xml,.yml,.yaml,.sql,.env,.log"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-        <Tooltip title="Attach images or code/text files"><IconButton size="small" onClick={() => fileRef.current.click()}><AttachFileIcon fontSize="small" /></IconButton></Tooltip>
-        <Tooltip title={{ auto: 'Web search: Auto — searches when your question needs fresh facts (click to change)', on: 'Web search: ON for every message', off: 'Web search: OFF' }[settings.webSearch || 'auto']}>
-          <Chip size="small" icon={<LanguageIcon sx={{ fontSize: '16px !important' }} />} label={{ auto: 'Auto', on: 'Search', off: 'Off' }[settings.webSearch || 'auto']}
-            onClick={() => setSettings({ ...settings, webSearch: { auto: 'on', on: 'off', off: 'auto' }[settings.webSearch || 'auto'] })}
-            color={settings.webSearch === 'on' ? 'primary' : 'default'} variant={settings.webSearch === 'on' ? 'filled' : 'outlined'}
-            sx={{ borderRadius: '8px', fontSize: 12.5, borderColor: 'divider', opacity: settings.webSearch === 'off' ? 0.6 : 1 }} />
-        </Tooltip>
+        {/* + menu (like Claude): files, web search, style */}
+        <Tooltip title="Add files, web search & more"><IconButton size="small" onClick={(e) => setPlusMenu(e.currentTarget)} sx={{ border: 1, borderColor: 'divider' }}><AddIcon fontSize="small" /></IconButton></Tooltip>
+        {settings.webSearch === 'on' && (
+          <Chip size="small" icon={<LanguageIcon sx={{ fontSize: '15px !important' }} />} label="Search" color="primary" onDelete={() => setSettings({ ...settings, webSearch: 'auto' })}
+            sx={{ borderRadius: '8px', fontSize: 12.5 }} />
+        )}
         <Tooltip title={listening ? 'Stop listening' : 'Voice input'}>
           <IconButton size="small" onClick={toggleMic} color={listening ? 'error' : 'default'}>
             {listening ? <MicOffIcon fontSize="small" /> : <MicIcon fontSize="small" />}
@@ -140,6 +142,25 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
           </IconButton>
         )}
       </Box>
+
+      <Menu anchorEl={plusMenu} open={!!plusMenu} onClose={() => setPlusMenu(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }} transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{ sx: { borderRadius: '14px', minWidth: 260, mt: -1 } }} MenuListProps={{ dense: true }}>
+        <MenuItem onClick={() => { setPlusMenu(null); fileRef.current.click(); }} sx={{ borderRadius: '8px', mx: 0.75, py: 1 }}>
+          <ListItemIcon><AttachFileIcon fontSize="small" /></ListItemIcon>
+          <Box><Typography sx={{ fontSize: 14 }}>Add photos & files</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>Images, PDFs as text, code, notes</Typography></Box>
+        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <Typography sx={{ px: 2, py: 0.5, fontSize: 11.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <LanguageIcon sx={{ fontSize: 15 }} /> Web search
+        </Typography>
+        {[['auto', 'Auto', 'Searches when your question needs fresh facts'], ['on', 'Always', 'Search the web for every message'], ['off', 'Off', 'Answer from the model only']].map(([v, l, d]) => (
+          <MenuItem key={v} onClick={() => { setSettings({ ...settings, webSearch: v }); setPlusMenu(null); }} sx={{ borderRadius: '8px', mx: 0.75 }}>
+            <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>{l}</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>{d}</Typography></Box>
+            {(settings.webSearch || 'auto') === v && <CheckIcon fontSize="small" sx={{ color: 'primary.main' }} />}
+          </MenuItem>
+        ))}
+      </Menu>
 
       <Menu anchorEl={personaMenu} open={!!personaMenu} onClose={() => setPersonaMenu(null)}
         PaperProps={{ sx: { borderRadius: 3, minWidth: 260, maxHeight: 480 } }} MenuListProps={{ dense: true }}>

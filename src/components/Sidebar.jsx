@@ -26,6 +26,20 @@ const SectionTitle = ({ children, open, onToggle }) => (
   </ButtonBase>
 );
 
+// Today · Yesterday · Previous 7 days · Previous 30 days · Older (newest first, like ChatGPT)
+function groupByDate(list) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const day = 864e5, t0 = start.getTime();
+  const buckets = [['Today', t0], ['Yesterday', t0 - day], ['Previous 7 days', t0 - 7 * day], ['Previous 30 days', t0 - 30 * day], ['Older', -Infinity]];
+  const at = (c) => c.updatedAt || c.createdAt || 0;
+  const out = buckets.map(([label]) => [label, []]);
+  [...list].sort((a, b) => at(b) - at(a)).forEach((c) => {
+    const i = buckets.findIndex(([, from]) => at(c) >= from);
+    out[i < 0 ? out.length - 1 : i][1].push(c);
+  });
+  return out.filter(([, items]) => items.length);
+}
+
 export const NAV = [
   ['new', AddIcon, 'New chat', 'Ctrl+Shift+O'],
   ['search', SearchIcon, 'Search', 'Ctrl+K'],
@@ -154,7 +168,12 @@ export default function Sidebar({
         )}
         <SectionTitle open={open.recents} onToggle={() => setOpen((o) => ({ ...o, recents: !o.recents }))}>{project ? 'Chats' : 'Recents'}</SectionTitle>
         <Collapse in={open.recents}>
-          <List dense disablePadding>{recent.map(ChatRow)}</List>
+          {groupByDate(recent).map(([label, items]) => (
+            <Box key={label}>
+              <Typography sx={{ px: 1.5, pt: 1, pb: 0.25, fontSize: 11.5, color: 'text.secondary', opacity: 0.8 }}>{label}</Typography>
+              <List dense disablePadding>{items.map(ChatRow)}</List>
+            </Box>
+          ))}
           {!recent.length && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 13, color: 'text.secondary' }}>No chats yet</Typography>}
         </Collapse>
         {archived.length > 0 && (

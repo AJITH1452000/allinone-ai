@@ -41,17 +41,24 @@ const MATH = /^[\d\s+\-*/().^%=x×÷]+$/;
 const CODING = /\b(javascript|typescript|js|ts|python|java|c\+\+|c#|golang|rust|php|kotlin|swift|react|vue|angular|node(\.js)?|express|next\.?js|css|html|sql|mongodb|git|docker|closures?|functions?|arrays?|objects?|class(es)?|loops?|recursion|promises?|async|await|hooks?|props|state|api|algorithms?|data structures?|oop|inheritance|variables?|syntax|regex|big ?o)\b/i;
 // …unless they ask for something new or time-sensitive
 const FRESH = /\b(latest|newest|new in|released?|release date|version|update[sd]?|news|today|current(ly)?|this (week|month|year)|deprecated|20[2-3]\d)\b/i;
+// Small talk & questions about the assistant itself — answer like a person, never search the news for these
+const SMALLTALK = /^\s*(how (are|r) (you|u)|how('s| is) (it going|your day|life)|how do you do|what'?s up|wassup|sup|who are you|what are you|what is your name|what'?s your name|your name|what can you do|what do you do|are you (there|ok|real|human|a bot|an ai)|can you help( me)?|help|nice( to meet you)?|good( job)?|great|cool|awesome|wow|lol|haha|hmm+|yes|no|yeah|nope|sure|i('m| am) (fine|good|ok|okay|bored|tired|happy|sad)|i love you|miss you|good night|see you|eppadi irukeenga|epdi iruka|nalla irukeengala|sapteengala|எப்படி இருக்கீங்க|நலமா|சாப்பிட்டீங்களா)(?=$|[\s!.?,])[\s!.?,஀-௿a-z]*$/i;
+// "you / your" questions are about the assistant, not the world ("what is your favourite colour?")
+const ABOUT_BOT = /\b(you|your|yourself|u)\b/i;
+const NAMED = /(^|\s)[A-Z][\w.'-]+|[A-Z]{2,}|[஀-௿]{2,}|\d{3,}/; // a name, acronym, Tamil word or number
 export function needsSearch(q = '') {
   const s = q.trim();
-  if (s.length < 2 || GREETING.test(s) || MATH.test(s)) return false;
+  if (s.length < 2 || GREETING.test(s) || MATH.test(s) || SMALLTALK.test(s)) return false;
   if (s.includes('```') || s.length > 1500) return false; // pasted code / long documents
   if (TASK.test(s) || CREATIVE.test(s)) return false;
   if (CODING.test(s) && !FRESH.test(s)) return false;
+  // Short chit-chat directed at the assistant ("how was your day", "do you like music") → no search
+  if (ABOUT_BOT.test(s) && !FRESH.test(s) && !NAMED.test(s.replace(/^\w/, '')) && s.split(/\s+/).length <= 8) return false;
   return true;
 }
 
 // ---------- relevance (keeps cards & related topics on-topic) ----------
-const STOP = new Set('the and for with what who whom whose when where which why how are was were this that from into about explain tell give show simple example examples please you your his her their its in on of to is a an me my'.split(' '));
+const STOP = new Set('the and for with what who whom whose when where which why how are was were this that from into about explain tell give show simple example examples please you your his her their its in on of to is a an me my doing going'.split(' '));
 const stems = (s = '') => [...new Set((s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter((w) => !STOP.has(w)).map((w) => w.slice(0, 5)))];
 const mentions = (text, keys) => { const t = stems(text); return keys.some((k) => t.includes(k)); };
 
@@ -165,7 +172,10 @@ export async function webSearch(query, keys = {}) {
   const related = onTopic.slice(1).filter((w) => mentions(`${w.name} ${w.description} ${w.text}`, [...qKeys, ...mainKeys]));
 
   // Order: best encyclopedia match → newest news → web results → one more encyclopedia page
-  let results = [...(main ? [main] : []), ...news.slice(0, 4), ...web.r.slice(0, 4), ...related.slice(0, 1)];
+  // News must mention what was asked (drops random headlines for vague queries)
+  const onTopicNews = qKeys.length ? news.filter((n) => mentions(n.title, qKeys)) : [];
+  const onTopicWeb = qKeys.length ? web.r.filter((w) => mentions(`${w.title} ${w.text}`, qKeys)) : [];
+  let results = [...(main ? [main] : []), ...onTopicNews.slice(0, 4), ...onTopicWeb.slice(0, 4), ...related.slice(0, 1)];
   const seen = new Set();
   results = results.filter((r) => r.url && !seen.has(r.url) && seen.add(r.url));
   const engine = [web.name, wiki.length && 'Wikipedia', news.length && 'Google News'].filter(Boolean).join(' + ');
@@ -204,7 +214,7 @@ export function withResults({ results }, question) {
   const today = new Date().toISOString().slice(0, 10);
   if (!results?.length) {
     return `<search_results date="${today}">\nNo results found.\n</search_results>\n`
-      + `(If this is a factual question, reply: "No verified real-time information found for this query.")\n\n${question}`;
+      + `(If this is a factual question, reply: "I could not find verified, accurate information on that specific topic.")\n\n${question}`;
   }
   return `<search_results date="${today}">\n`
     + results.map((r, i) => `[${i + 1}] ${compact(r, i)}\nURL: ${shortUrl(r.url)}`).join('\n')

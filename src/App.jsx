@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ThemeProvider, CssBaseline, Box, Drawer, IconButton, Tooltip, Typography, useMediaQuery, Alert, ButtonBase, InputBase, alpha } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box, Button, Drawer, IconButton, Tooltip, Typography, useMediaQuery, Alert, ButtonBase, InputBase, alpha } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import MenuIcon from '@mui/icons-material/Menu';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -25,6 +25,8 @@ import PreviewPanel from './components/PreviewPanel';
 import { loadChats, saveChats, loadSettings, saveSettings, newChat, uid, loadProjects, saveProjects } from './lib/storage';
 import ChatMenu from './components/ChatMenu';
 import ShareDialog from './components/ShareDialog';
+import { quickTitle } from './lib/titles';
+import IosShareIcon from '@mui/icons-material/IosShare';
 import { SearchDialog, ProjectsDialog, ArtifactsDialog } from './components/Panels';
 import { buildSystem } from './lib/personas';
 import { fetchModels, streamChat, toApiMessages, exportMarkdown, estTokens, kbDeleteAll } from './lib/api';
@@ -147,9 +149,15 @@ export default function App() {
     const el = scrollRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [chat.messages]);
+  const [showJump, setShowJump] = useState(false); // "↓ jump to latest" button (like Claude / ChatGPT)
   const onScroll = (e) => {
     const el = e.currentTarget;
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    setShowJump(el.scrollHeight - el.scrollTop - el.clientHeight > 400);
+  };
+  const jumpToLatest = () => {
+    const el = scrollRef.current;
+    if (el) { el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); stickRef.current = true; }
   };
 
   const updateChat = useCallback((id, fn) => setChats((cs) => cs.map((c) => (c.id === id ? fn(c) : c))), []);
@@ -207,6 +215,15 @@ export default function App() {
     flush();
     setStreamingId(null);
     abortRef.current = null;
+
+    // First answer in a chat → let a fast cloud model write a better short title (local models keep the instant one)
+    if (!error && text && history.filter((m) => m.role === 'user').length === 1) {
+      const first = history.find((m) => m.role === 'user');
+      fetch('/api/title', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: model.provider, model: model.id, text: first.content, reply: text.slice(0, 300) }),
+      }).then((r) => r.json()).then(({ title }) => { if (title) updateChat(chatId, (c) => ({ ...c, title })); }).catch(() => {});
+    }
   }, [settings, updateChat, models]);
 
   // Speed: as soon as a model is chosen, load it and pre-process its prompt (and your files' index) in the background
@@ -231,7 +248,7 @@ export default function App() {
     if (!settings.model) return;
     const userMsg = { id: uid(), role: 'user', content: text, images, files };
     const history = [...chat.messages, userMsg];
-    const title = chat.messages.length ? chat.title : (text || files[0]?.name || 'Image chat').slice(0, 48);
+    const title = chat.messages.length ? chat.title : quickTitle(text, { hasImages: images.length > 0, fileName: files[0]?.name });
     updateChat(chat.id, (c) => ({ ...c, title, updatedAt: Date.now() }));
     run(chat.id, history);
   };
@@ -397,6 +414,10 @@ export default function App() {
             )}
             <Box sx={{ flex: 1 }} />
             {isMobile && <Tooltip title="New chat"><IconButton onClick={startNew}><AddCommentOutlinedIcon /></IconButton></Tooltip>}
+            {chat.messages.length > 0 && (
+              <Button size="small" color="inherit" startIcon={<IosShareIcon sx={{ fontSize: '18px !important' }} />} onClick={() => setShareId(chat.id)}
+                sx={{ borderRadius: '10px', px: 1.5, fontSize: 14, display: { xs: 'none', sm: 'inline-flex' } }}>Share</Button>
+            )}
             <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
               <IconButton onClick={() => setSettings((s) => ({ ...s, theme: mode === 'dark' ? 'light' : 'dark' }))}>
                 {mode === 'dark' ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
@@ -450,11 +471,20 @@ export default function App() {
                         <Message key={m.id} m={m} isLast={i === chat.messages.length - 1} fontSize={settings.fontSize}
                           onAsk={(q) => !streaming && send({ text: q, images: [], files: [] })}
                           streaming={streaming} onEdit={edit} onRegenerate={regenerate}
+                          onFeedback={(v) => updateChat(chat.id, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, feedback: x.feedback === v ? null : v } : x)) }))}
                           onPreview={(code, lang, title) => setPreview({ code, lang, title })} />
                       ))}
                     </Box>
                   </Box>
-                  <Box sx={{ maxWidth: 780, width: '100%', mx: 'auto', px: 2, pb: 1.5, pt: 0.5 }}>
+                  <Box sx={{ maxWidth: 780, width: '100%', mx: 'auto', px: 2, pb: 1.5, pt: 0.5, position: 'relative' }}>
+                    {showJump && (
+                      <Tooltip title="Jump to latest">
+                        <IconButton onClick={jumpToLatest} sx={{
+                          position: 'absolute', top: -52, left: '50%', transform: 'translateX(-50%)', zIndex: 3,
+                          bgcolor: 'background.paper', border: 1, borderColor: 'divider', boxShadow: '0 4px 14px rgba(0,0,0,.12)', '&:hover': { bgcolor: 'background.paper' },
+                        }}><KeyboardArrowDownIcon /></IconButton>
+                      </Tooltip>
+                    )}
                     {composer}
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 0.75, fontSize: 11.5 }}>
                       AI can make mistakes. Check important info.

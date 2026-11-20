@@ -11,10 +11,24 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import LanguageIcon from '@mui/icons-material/Language';
+import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
+import ThumbUpIcon from '@mui/icons-material/ThumbUp';
+import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined';
+import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import KnowledgeCard, { WaitingNote } from './KnowledgeCard';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+
+// Models write maths as \( … \) and \[ … \] — turn those into $$ … $$ for KaTeX.
+// A single $ is NOT treated as maths, so prices like "$10 and $20" stay as normal text.
+const mathify = (t = '') => t
+  .replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => `\n$$\n${m.trim()}\n$$\n`)
+  .replace(/\\\(([\s\S]+?)\\\)/g, (_, m) => `$$${m.trim()}$$`);
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const PREVIEWABLE = ['html', 'svg', 'xml', 'react', 'jsx', 'tsx', 'mermaid'];
@@ -56,7 +70,9 @@ export function parseSpecial(content = '') {
 
 const HL_LANG = { react: 'jsx', mermaid: 'text', svg: 'markup', html: 'markup' };
 
-const makeComponents = (onPreview) => ({
+// allowed = links that really came from web search (null = no search → don't filter)
+const norm = (u = '') => { try { return decodeURI(u).replace(/[/#?]+$/, '').toLowerCase(); } catch { return u.toLowerCase(); } };
+const makeComponents = (onPreview, allowed) => ({
   pre: ({ children }) => <>{children}</>,
   code({ className, children }) {
     const code = String(children).replace(/\n$/, '');
@@ -85,7 +101,13 @@ const makeComponents = (onPreview) => ({
       </Box>
     );
   },
-  a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" style={{ color: '#c96442' }}>{children}</a>,
+  a: ({ href, children }) => {
+    // A link the model invented (not in the search results) is shown as plain text, never as a clickable source
+    if (allowed && href && !allowed.has(norm(href))) {
+      return <Tooltip title="Removed: this link was not in the search results (the model made it up)"><span style={{ textDecoration: 'line-through dotted', opacity: 0.75 }}>{children}</span></Tooltip>;
+    }
+    return <a href={href} target="_blank" rel="noreferrer" style={{ color: '#c96442' }}>{children}</a>;
+  },
 });
 
 function speak(text) {
@@ -95,7 +117,7 @@ function speak(text) {
   window.speechSynthesis.speak(u);
 }
 
-function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSize, onAsk }) {
+function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSize, onAsk, onFeedback }) {
   const theme = useTheme();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.content);
@@ -144,6 +166,10 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
   const working = streaming && isLast;
   const parsed = parseSpecial(m.content);
   const thinking = [m.reasoning, parsed.thought].filter(Boolean).join('\n\n');
+  // Links that really came from the web search (full URL or the short /api/r/… form). null = no search → no filtering.
+  const allowedLinks = m.search && !m.search.searching
+    ? new Set([...(m.search.results || []), ...(m.search.related || [])].flatMap((r) => [r.url, r.short]).filter(Boolean).map(norm))
+    : null;
   return (
     <Box sx={{ display: 'flex', gap: 1.5, mb: 3, '&:hover .act': { opacity: 1 } }}>
       <Avatar sx={{ background: 'linear-gradient(135deg,#c96442,#7c5cff)', width: 28, height: 28, mt: 0.25 }}>
@@ -181,7 +207,8 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
           ...(m.error && { color: 'error.main' }),
         }}>
           {m.content ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={makeComponents(onPreview)}>{parsed.text}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
+              components={makeComponents(onPreview, allowedLinks)}>{mathify(parsed.text)}</ReactMarkdown>
           ) : working && !thinking && m.search && !m.search.searching ? (
             <WaitingNote sources={m.search.results?.length} />
           ) : working && !thinking ? (
@@ -206,6 +233,8 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
           <Box className="act" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, opacity: isLast ? 1 : 0, transition: '.2s' }}>
             <CopyBtn text={m.content} />
             <Tooltip title="Read aloud"><IconButton size="small" onClick={() => speak(m.content)}><VolumeUpIcon fontSize="inherit" /></IconButton></Tooltip>
+            <Tooltip title="Good response"><IconButton size="small" onClick={() => onFeedback?.('up')} sx={{ color: m.feedback === 'up' ? 'success.main' : undefined }}>{m.feedback === 'up' ? <ThumbUpIcon fontSize="inherit" /> : <ThumbUpOutlinedIcon fontSize="inherit" />}</IconButton></Tooltip>
+            <Tooltip title="Bad response"><IconButton size="small" onClick={() => onFeedback?.('down')} sx={{ color: m.feedback === 'down' ? 'error.main' : undefined }}>{m.feedback === 'down' ? <ThumbDownIcon fontSize="inherit" /> : <ThumbDownOutlinedIcon fontSize="inherit" />}</IconButton></Tooltip>
             {isLast && <Tooltip title="Regenerate"><IconButton size="small" onClick={onRegenerate}><RefreshIcon fontSize="inherit" /></IconButton></Tooltip>}
             {m.model && (
               <Tooltip title="Tokens sent to the model (input) and received (output). Lower input = cheaper & faster.">

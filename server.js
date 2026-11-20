@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { IS_VERCEL, KEYS_FILE } from './paths.js';
 import * as kb from './kb.js';
 import * as usage from './usage.js';
-import { webSearch, needsSearch, withResults, resolveShort } from './search.js';
+import { webSearch, needsSearch, withResults, resolveShort, shortUrl } from './search.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -278,12 +278,13 @@ const OLLAMA_NATIVE = (process.env.OLLAMA_URL || 'http://localhost:11434/v1').re
 const KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '2h';
 const BAKED = new Map(); // model → its built-in SYSTEM prompt
 async function bakedSystem(model) {
-  if (BAKED.has(model)) return BAKED.get(model);
+  const hit = BAKED.get(model);
+  if (hit && Date.now() - hit.at < 60_000) return hit.system; // re-check every minute (picks up npm run build-models)
   try {
     const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
-    BAKED.set(model, j.system || '');
-  } catch { return ''; }
-  return BAKED.get(model);
+    BAKED.set(model, { system: j.system || '', at: Date.now() });
+  } catch { return hit?.system || ''; }
+  return BAKED.get(model).system;
 }
 
 // Loads the model into memory and pre-processes its system prompt, so the first real message starts instantly.
@@ -358,7 +359,7 @@ app.post('/api/chat', async (req, res) => {
     const found = await webSearch(lastText, searchKeys()).catch(() => ({ results: [] }));
     // Everything the app needs for an instant knowledge card (photo, summary, dated news, related topics)
     const card = ({ kind, title, name, url, description, image, date, source, text }) =>
-      ({ kind, title, name, url, description, image, date, source, text: kind === 'wiki' ? text : undefined });
+      ({ kind, title, name, url, short: shortUrl(url), description, image, date, source, text: kind === 'wiki' ? text : undefined });
     send({ t: 'search', v: { engine: found.engine, results: (found.results || []).map(card), related: (found.related || []).map(card) } });
     // Always attach: the results (placed before the question), or a "nothing found → don't guess" note
     const last = msgs[msgs.length - 1];
@@ -442,6 +443,37 @@ app.post('/api/chat', async (req, res) => {
   }
   if (outText) logUsage(); // also logs stopped/partial answers — you still pay for those tokens
   res.end();
+});
+
+// ---------- Smart chat titles (like Claude/ChatGPT: "Greeting", "Pongal festival dates") ----------
+app.post('/api/title', async (req, res) => {
+  const { provider, model, text = '', reply = '' } = req.body || {};
+  // Use the fastest model available: Learn Lite locally, otherwise the chat's own model
+  // Only cloud models write titles (fast + reliable). Small local models on a CPU are slow and often wrong,
+  // so for them the app keeps its instant rule-based title.
+  if (['ollama', 'pollinations'].includes(provider) || PROVIDERS[provider]?.custom) return res.json({ title: '' });
+  const use = { provider, model };
+  const p = PROVIDERS[use.provider];
+  if (!p?.key) return res.json({ title: '' });
+  try {
+    const r = await fetch(`${p.base}/chat/completions`, {
+      method: 'POST', headers: headersFor(use.provider), signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({
+        model: use.model, stream: false, max_tokens: 16, temperature: 0.2,
+        messages: [
+          { role: 'system', content: 'You name chats. Reply with ONLY a 1-4 word topic title in Title Case: a noun phrase describing the topic, not a sentence. Same language as the user. No quotes.' },
+          { role: 'user', content: 'how are you' }, { role: 'assistant', content: 'Greeting' },
+          { role: 'user', content: 'pongal festival date this year' }, { role: 'assistant', content: 'Pongal Festival Date' },
+          { role: 'user', content: 'write a python function to reverse a string' }, { role: 'assistant', content: 'Python String Reversal' },
+          { role: 'user', content: String(text).slice(0, 400) },
+        ],
+      }),
+    });
+    const j = await r.json();
+    let title = (j.choices?.[0]?.message?.content || '').replace(/<thinking>[\s\S]*?<\/thinking>/g, '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+    title = title.replace(/^(title\s*:\s*)/i, '').replace(/^["'*#\s]+|["'*.\s]+$/g, '').slice(0, 60);
+    res.json({ title: title.split(/\s+/).length <= 8 ? title : '' });
+  } catch { res.json({ title: '' }); }
 });
 
 // ---------- Usage & billing ----------
