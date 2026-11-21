@@ -9,3 +9,6 @@ data
 
 # Local training storage location (per PC)
 training/storage.json
+
+# Secret key of the Learn tunnel guard
+tunnel/.token

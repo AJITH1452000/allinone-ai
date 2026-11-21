@@ -11,7 +11,8 @@
     "eval": "node eval/run.js",
     "storage": "node training/storage.mjs",
     "make-notebook": "node training/make-notebook.mjs",
-    "import-model": "node training/import-model.mjs"
+    "import-model": "node training/import-model.mjs",
+    "learn-online": "node tunnel/learn-online.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.13.0",

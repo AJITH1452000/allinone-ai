@@ -38,7 +38,7 @@ function applyKeys() {
   for (const [id, p] of Object.entries(PROVIDERS)) {
     if (id === 'pollinations') { p.key = process.env.POLLINATIONS === 'off' ? '' : (process.env.POLLINATIONS_API_KEY || 'none'); p.noAuth = !process.env.POLLINATIONS_API_KEY; }
     // Ollama runs on your PC — on Vercel it's only used if OLLAMA_URL points to a public address
-    else if (id === 'ollama') p.key = IS_VERCEL && !process.env.OLLAMA_URL ? '' : 'ollama';
+    else if (id === 'ollama') p.key = IS_VERCEL && !process.env.OLLAMA_URL ? '' : (process.env.OLLAMA_API_KEY || 'ollama'); // key = the Learn tunnel's guard (npm run learn-online)
     else if (!p.custom) p.key = (saved[id] || process.env[p.env] || '').trim();
   }
   // Custom OpenAI-compatible endpoints added from the app (LM Studio, vLLM, Together, your own server…)
@@ -280,13 +280,15 @@ app.post('/api/search-keys', async (req, res) => {
 
 // ---------- Speed: keep local models loaded + pre-warm ----------
 const OLLAMA_NATIVE = (process.env.OLLAMA_URL || 'http://localhost:11434/v1').replace(/\/v1\/?$/, '');
+// Learn on the live site: requests to your PC's Ollama carry the guard's key (see tunnel/learn-online.mjs)
+const OLLAMA_H = process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {};
 const KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '2h';
 const BAKED = new Map(); // model → its built-in SYSTEM prompt
 async function bakedSystem(model) {
   const hit = BAKED.get(model);
   if (hit && Date.now() - hit.at < 60_000) return hit.system; // re-check every minute (picks up npm run build-models)
   try {
-    const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
+    const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', headers: OLLAMA_H, body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
     BAKED.set(model, { system: j.system || '', at: Date.now() });
   } catch { return hit?.system || ''; }
   return BAKED.get(model).system;
@@ -309,12 +311,12 @@ app.post('/api/warm', async (req, res) => {
     // Already in memory with this exact prompt? → ready immediately (no second warm-up for the same model)
     const key = `${model}\n${sys}`;
     if (WARM.get(model) === key) {
-      const ps = await (await fetch(`${OLLAMA_NATIVE}/api/ps`, { signal: AbortSignal.timeout(3000) })).json().catch(() => ({}));
+      const ps = await (await fetch(`${OLLAMA_NATIVE}/api/ps`, { headers: OLLAMA_H, signal: AbortSignal.timeout(3000) })).json().catch(() => ({}));
       if ((ps.models || []).some((m) => m.name === model || m.model === model)) return done();
     }
     // If Ollama is busy with another long answer, don't make the app wait forever
     await fetch(`${OLLAMA_NATIVE}/api/chat`, {
-      method: 'POST', signal: AbortSignal.timeout(45_000),
+      method: 'POST', headers: OLLAMA_H, signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model, stream: false, keep_alive: KEEP_ALIVE, options: { num_predict: 1 },
         messages: sys ? [{ role: 'system', content: sys }, { role: 'user', content: 'hi' }] : [{ role: 'user', content: 'hi' }],
@@ -329,7 +331,7 @@ app.post('/api/warm', async (req, res) => {
 async function ollamaHas(id) {
   if (cache.data) return cache.data.models.some((m) => m.id === id);
   try {
-    const j = await (await fetch(`${OLLAMA_NATIVE}/api/tags`, { signal: AbortSignal.timeout(3000) })).json();
+    const j = await (await fetch(`${OLLAMA_NATIVE}/api/tags`, { headers: OLLAMA_H, signal: AbortSignal.timeout(3000) })).json();
     return (j.models || []).some((m) => m.name === id || m.model === id);
   } catch { return false; }
 }
@@ -366,7 +368,7 @@ async function supportsTools(provider, model) {
   if (provider !== 'ollama') return TOOL_PROVIDERS.has(provider);
   if (!CAPS.has(model)) {
     try {
-      const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
+      const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', headers: OLLAMA_H, body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
       CAPS.set(model, (j.capabilities || []).includes('tools'));
     } catch { return false; }
   }
