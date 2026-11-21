@@ -6,15 +6,17 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CodeIcon from '@mui/icons-material/Code';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import TranslateIcon from '@mui/icons-material/Translate';
 import WebOutlinedIcon from '@mui/icons-material/WebOutlined';
 import NotesOutlinedIcon from '@mui/icons-material/NotesOutlined';
 import { makeTheme } from './theme';
+import { BRAND, BRAND_GRADIENT } from './brand';
 import Sidebar from './components/Sidebar';
-import Message from './components/Message';
+import { LogoMark } from './components/Logo';
+import Message, { parseSpecial } from './components/Message';
+import { mergeFiles, fixRequest } from './lib/project';
 import Composer from './components/Composer';
 import ModelPicker from './components/ModelPicker';
 import SettingsDialog from './components/SettingsDialog';
@@ -28,7 +30,8 @@ import ShareDialog from './components/ShareDialog';
 import { quickTitle } from './lib/titles';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import { SearchDialog, ProjectsDialog, ArtifactsDialog } from './components/Panels';
-import { buildSystem } from './lib/personas';
+import { buildSystem, rememberedFact, looksSecret } from './lib/personas';
+import { speak } from './lib/speech';
 import { fetchModels, streamChat, toApiMessages, exportMarkdown, estTokens, kbDeleteAll } from './lib/api';
 
 const STARTERS = [
@@ -112,6 +115,16 @@ export default function App() {
   const chat = chats.find((c) => c.id === activeId) || chats[0];
   const chatProject = projects.find((p) => p.id === chat.projectId);
   const streaming = !!streamingId;
+  // Project mode: for each message, the project files written in EARLIER answers of this chat
+  // (a "Fix with AI" reply contains only the changed files; the rest come from here)
+  const projectBase = useMemo(() => {
+    let acc = [];
+    return chat.messages.map((m) => {
+      const before = acc;
+      if (m.role === 'assistant' && m.content && /<file\s+path=/i.test(m.content)) acc = mergeFiles(acc, parseSpecial(m.content).files);
+      return before;
+    });
+  }, [chat.messages]);
 
   useEffect(() => { const t = setTimeout(() => saveChats(chats), 400); return () => clearTimeout(t); }, [chats]);
   useEffect(() => { saveSettings(settings); }, [settings]);
@@ -190,12 +203,18 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    let text = '', reasoning = '', error = false, usage = null, raf = 0, sources = null, cost = null, search = null;
+    let text = '', reasoning = '', error = false, usage = null, raf = 0, sources = null, cost = null, search = null, tools = null, verify = null, steps = null, savedMemory = false;
     const flush = () => {
       raf = 0;
       updateChat(chatId, (c) => ({
-        ...c, messages: c.messages.map((m) => (m.id === asstId ? { ...m, content: text, reasoning, error, usage, sent: m.sent, sources, cost, search } : m)),
+        ...c, messages: c.messages.map((m) => (m.id === asstId ? { ...m, content: text, reasoning, error, usage, sent: m.sent, sources, cost, search, tools, verify, steps } : m)),
       }));
+    };
+    const remember = (fact) => {
+      if (settings.memoryOn === false || !fact) return;
+      savedMemory = true;
+      setSettings((s) => ((s.memories || []).some((x) => x.text.toLowerCase() === fact.toLowerCase()) ? s
+        : { ...s, memories: [...(s.memories || []), { id: uid(), text: fact, at: Date.now() }] }));
     };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(flush); };
 
@@ -214,8 +233,16 @@ export default function App() {
         maxTokens: settings.maxTokens,
         kbId: mine?.id, // the server searches this model's uploaded files
         webSearch: settings.webSearch || 'auto', // auto / on / off
+        reasoning: settings.reasoning || 'balanced', // fast / balanced / expert
+        tools: settings.tools || 'auto',
+        allowCode: !!settings.allowCode,
+        bigJobs: settings.bigJobs || 'auto',
       }, {
         signal: ctrl.signal,
+        onTool: (t) => { tools = [...(tools || []).filter((x) => x.id !== t.id), t]; schedule(); },
+        onMemory: remember,
+        onVerify: (v) => { verify = v; schedule(); },
+        onStep: (s) => { const cur = steps || []; steps = cur.some((x) => x.id === s.id) ? cur.map((x) => (x.id === s.id ? s : x)) : [...cur, s]; schedule(); },
         onSources: (s) => { sources = s; schedule(); },
         onCost: (c) => { cost = c; schedule(); },
         onSearch: (s) => { search = s; schedule(); },
@@ -232,6 +259,9 @@ export default function App() {
     flush();
     setStreamingId(null);
     abortRef.current = null;
+    // Long-term memory for models without tools: "remember that …" is saved by the app itself
+    if (!error && !savedMemory) remember(rememberedFact(lastUser?.content || ''));
+    if (settings.autoSpeak && !error && text && !ctrl.signal.aborted) speak(text);
 
     // First answer in a chat → let a fast cloud model write a better short title (local models keep the instant one)
     if (!error && text && history.filter((m) => m.role === 'user').length === 1) {
@@ -253,8 +283,9 @@ export default function App() {
     let alive = true;
     const t = setTimeout(() => {
       if (base.provider === 'ollama') setWarming(true);
+      // Never let "Preparing model…" hang: stop waiting after 45 s (the model keeps loading in the background)
       fetch('/api/warm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({ provider: base.provider, model: base.id, system: systemFor(settings, models), kbId: mine?.id }),
       }).catch(() => {}).finally(() => { if (alive) setWarming(false); });
     }, 300);
@@ -263,6 +294,10 @@ export default function App() {
 
   const send = ({ text, images, files }) => {
     if (!settings.model) return;
+    // Safety: warn before a password / API key / card number goes to a cloud AI (local Ollama models are private)
+    const base = settings.model.provider === 'mine' ? settings.myModels.find((x) => x.id === settings.model.id)?.base : settings.model;
+    if (base?.provider !== 'ollama' && looksSecret(`${text}\n${files.map((f) => f.text).join('\n')}`)
+      && !window.confirm('Your message looks like it contains a password, API key or card number.\n\nIt will be sent to an online AI provider. Send anyway?')) return false;
     const userMsg = { id: uid(), role: 'user', content: text, images, files };
     const history = [...chat.messages, userMsg];
     const title = chat.messages.length ? chat.title : quickTitle(text, { hasImages: images.length > 0, fileName: files[0]?.name });
@@ -378,17 +413,24 @@ export default function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default', overflow: 'hidden', position: 'relative' }}>
+        {/* Aurora: soft brand-coloured light drifting slowly behind the glass surfaces */}
+        <Box aria-hidden sx={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden',
+          '& > span': { position: 'absolute', borderRadius: '50%', filter: 'blur(90px)', opacity: mode === 'dark' ? 0.32 : 0.28 } }}>
+          <Box component="span" sx={{ width: '46vw', height: '46vw', top: '-18vw', left: '8vw', background: BRAND.violet, animation: 'evx-drift-a 26s ease-in-out infinite' }} />
+          <Box component="span" sx={{ width: '40vw', height: '40vw', top: '-10vw', right: '-12vw', background: BRAND.cyan, animation: 'evx-drift-b 32s ease-in-out infinite' }} />
+          <Box component="span" sx={{ width: '36vw', height: '36vw', bottom: '-20vw', left: '34vw', background: BRAND.indigo, animation: 'evx-drift-c 38s ease-in-out infinite' }} />
+        </Box>
         <Drawer variant={isMobile ? 'temporary' : 'permanent'} open={isMobile ? mobileOpen : true} onClose={() => setMobileOpen(false)}
           sx={{ width: isMobile ? 0 : sidebarHidden ? 56 : 272, flexShrink: 0, transition: 'width .2s', '& .MuiDrawer-paper': { width: isMobile ? 272 : sidebarHidden ? 56 : 272, border: 0, transition: 'width .2s', overflowX: 'hidden' } }}>
           {sidebar}
         </Drawer>
 
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative', zIndex: 1 }}>
           {/* Header */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, position: 'relative', zIndex: 2,
-            backdropFilter: 'saturate(180%) blur(12px)', bgcolor: (t) => alpha(t.palette.background.default, 0.8),
+            backdropFilter: 'saturate(180%) blur(14px)', bgcolor: (t) => alpha(t.palette.background.default, 0.45),
           }}>
             {isMobile && <IconButton onClick={() => setMobileOpen(true)}><MenuIcon /></IconButton>}
             <ModelPicker requestOpen={pickerReq} models={models} value={settings.model} freeOnly={settings.freeOnly} loading={modelsLoading} status={provStatus}
@@ -451,12 +493,7 @@ export default function App() {
                   <Box sx={{ width: '100%', maxWidth: 720, animation: 'fadeUp .4s ease both' }}>
                     {modelErr && <Alert severity="warning" sx={{ mb: 2, borderRadius: '12px' }}>{modelErr}</Alert>}
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 1 }}>
-                      <Box sx={{
-                        width: 36, height: 36, borderRadius: '11px', display: 'grid', placeItems: 'center', flexShrink: 0,
-                        background: 'linear-gradient(135deg,#c96442,#7c5cff)',
-                      }}>
-                        <AutoAwesomeIcon sx={{ fontSize: 20, color: '#fff' }} />
-                      </Box>
+                      <LogoMark size={38} />
                       <Typography component="h1" sx={{ fontSize: { xs: 24, sm: 30 }, fontWeight: 600, letterSpacing: '-0.02em' }}>
                         {greeting(profile.callMe || profile.name?.split(' ')[0])}
                       </Typography>
@@ -470,8 +507,8 @@ export default function App() {
                         <ButtonBase key={label} onClick={() => settings.model && send({ text: t, images: [], files: [] })}
                           sx={{
                             gap: 0.75, px: 1.5, py: 0.75, borderRadius: '999px', border: 1, borderColor: 'divider', fontSize: 13.5,
-                            color: 'text.secondary', bgcolor: 'background.paper', transition: 'all .15s',
-                            '&:hover': { color: 'text.primary', borderColor: 'text.secondary' },
+                            color: 'text.secondary', bgcolor: (t) => (t.palette.mode === 'light' ? 'rgba(255,255,255,.6)' : 'rgba(30,30,46,.55)'), backdropFilter: 'blur(14px)', transition: 'all .2s', animation: 'fadeUp .5s ease both',
+                            '&:hover': { color: 'primary.main', borderColor: 'primary.main', transform: 'translateY(-2px)', boxShadow: (t) => `0 8px 20px -10px ${alpha(t.palette.primary.main, 0.6)}` },
                           }}>
                           <Icon sx={{ fontSize: 17 }} /> {label}
                         </ButtonBase>
@@ -485,11 +522,11 @@ export default function App() {
                     <Box sx={{ maxWidth: 780, mx: 'auto', px: 2, pt: 3, pb: 2 }}>
                       {modelErr && <Alert severity="warning" sx={{ mb: 2, borderRadius: '12px' }}>{modelErr}</Alert>}
                       {chat.messages.map((m, i) => (
-                        <Message key={m.id} m={m} isLast={i === chat.messages.length - 1} fontSize={settings.fontSize}
+                        <Message key={m.id} m={m} isLast={i === chat.messages.length - 1} fontSize={settings.fontSize} baseFiles={projectBase[i]}
                           onAsk={(q) => !streaming && send({ text: q, images: [], files: [] })}
                           streaming={streaming} onEdit={edit} onRegenerate={regenerate}
                           onFeedback={(v) => updateChat(chat.id, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, feedback: x.feedback === v ? null : v } : x)) }))}
-                          onPreview={(code, lang, title) => setPreview({ code, lang, title })} />
+                          onPreview={(code, lang, title, files) => setPreview({ code: code || '', lang, title, files })} />
                       ))}
                     </Box>
                   </Box>
@@ -510,7 +547,12 @@ export default function App() {
                 </>
               )}
             </Box>
-            <PreviewPanel preview={preview} onClose={() => setPreview(null)} />
+            <PreviewPanel preview={preview} onClose={() => setPreview(null)}
+              onFix={(errors, isProject) => { if (streaming) return; setPreview(null); send({ text: isProject ? fixRequest(errors) : `The preview of your code shows these errors:
+
+${errors}
+
+Fix them and give the complete corrected code.`, images: [], files: [] }); }} />
           </Box>
         </Box>
       </Box>

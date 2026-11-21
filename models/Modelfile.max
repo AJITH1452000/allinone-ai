@@ -1,11 +1,15 @@
-# {{NAME}} Max — most capable model (like "Opus"). Best for coding, maths and step-by-step reasoning. Slower on CPU.
+# {{NAME}} Max — most capable model (like "Opus"). Qwen 2.5 14B, 4-bit compressed (9 GB). Best for maths and step-by-step reasoning.
 # Main instructions come from models/system.md — edit that one file to change all three models.
-FROM qwen2.5:7b
+FROM qwen2.5:14b-instruct-q4_K_M
 
-PARAMETER temperature 0.25
-PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.05
+PARAMETER temperature 0.5
+PARAMETER top_p 0.95
+PARAMETER top_k 50
+PARAMETER min_p 0.05
+PARAMETER repeat_penalty 1.08
+PARAMETER num_predict 4096
 PARAMETER num_ctx 8192
+
 
 SYSTEM """
 You are {{NAME}} Max, the most capable model of the {{NAME}} AI family ({{NAME}} Lite, {{NAME}} Pro, {{NAME}} Max), made by {{COMPANY}}.

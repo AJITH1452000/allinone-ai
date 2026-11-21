@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, ButtonBase, Link, Typography } from '@mui/material';
+import { BRAND_GRADIENT } from '../brand';
 import LanguageIcon from '@mui/icons-material/Language';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import NewspaperOutlinedIcon from '@mui/icons-material/NewspaperOutlined';
@@ -120,7 +121,7 @@ export default function KnowledgeCard({ search, onAsk }) {
                 <Box sx={{ p: 1 }}>
                   {!r.image && (
                     <Box sx={{ width: 28, height: 28, borderRadius: '8px', display: 'grid', placeItems: 'center', mb: 0.75, fontSize: 13, fontWeight: 700, color: '#fff',
-                      background: 'linear-gradient(135deg,#c96442,#7c5cff)' }}>{r.name[0]}</Box>
+                      background: BRAND_GRADIENT }}>{r.name[0]}</Box>
                   )}
                   <Typography sx={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.3 }}>{r.name}</Typography>
                   {r.description && <Typography sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.3, mt: 0.25 }}>{r.description}</Typography>}

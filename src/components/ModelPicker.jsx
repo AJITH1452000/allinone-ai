@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND_GRADIENT } from '../brand';
 import {
   Box, Button, ButtonBase, Chip, CircularProgress, Dialog, IconButton, InputBase, Link, Tab, Tabs,
   TextField, Tooltip, Typography, alpha, useMediaQuery,
@@ -87,7 +88,7 @@ export function AioAvatar({ size = 22 }) {
   return (
     <Box sx={{
       width: size, height: size, borderRadius: size / 3.5, flexShrink: 0, display: 'grid', placeItems: 'center',
-      background: 'linear-gradient(135deg,#c96442,#7c5cff)', color: '#fff', fontSize: size * 0.55,
+      background: BRAND_GRADIENT, color: '#fff', fontSize: size * 0.55,
     }}>✦</Box>
   );
 }
@@ -170,6 +171,42 @@ function ProviderRow({ p, onSaved }) {
         </Typography>
       )}
       {msg && <Typography sx={{ fontSize: 12.5, color: msg.ok ? 'success.main' : 'error.main' }}>{msg.t}</Typography>}
+    </Box>
+  );
+}
+
+// Free online AI keys that are really free today (checked Nov 2026). Each needs YOUR account — the app can't create keys for you.
+const FREE_KEYS = [
+  { id: 'gemini', name: 'Google Gemini', why: 'Best free option for building projects — strong at code, long answers', url: 'https://aistudio.google.com/apikey',
+    steps: 'Sign in with Google → "Create API key" → copy it → paste below in Google Gemini' },
+  { id: 'groq', name: 'Groq', why: 'Very fast answers, free plan', url: 'https://console.groq.com/keys',
+    steps: 'Sign in (Google or GitHub) → "Create API Key" → copy → paste below in Groq' },
+  { id: 'openrouter', name: 'OpenRouter', why: 'Many models; the ":free" ones cost nothing (about 50 requests a day)', url: 'https://openrouter.ai/keys',
+    steps: 'Sign in → "Create Key" → copy → paste below in OpenRouter' },
+];
+function FreeKeysGuide({ providers }) {
+  const done = FREE_KEYS.filter((k) => providers.find((p) => p.id === k.id)?.connected).length;
+  return (
+    <Box sx={{ p: 1.75, borderRadius: 3, border: 1, borderColor: 'primary.main', bgcolor: (t) => (t.palette.mode === 'light' ? 'rgba(91,76,240,.05)' : 'rgba(139,125,255,.08)') }}>
+      <Typography sx={{ fontWeight: 650, fontSize: 14.5 }}>🎁 Free online AI keys — about 5 minutes ({done}/{FREE_KEYS.length} connected)</Typography>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.25, mb: 1 }}>
+        Much smarter than models your PC can run. Once one is connected, big jobs (full projects) automatically use it — you can change that in Settings → Models.
+      </Typography>
+      {FREE_KEYS.map((k, i) => {
+        const ok = providers.find((p) => p.id === k.id)?.connected;
+        return (
+          <Box key={k.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.9, borderTop: i ? 1 : 0, borderColor: 'divider' }}>
+            <Box sx={{ width: 22, height: 22, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0,
+              bgcolor: ok ? 'success.main' : 'action.selected', color: ok ? '#fff' : 'text.primary' }}>{ok ? '✓' : i + 1}</Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{k.name} <Typography component="span" sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 400 }}>· {k.why}</Typography></Typography>
+              {!ok && <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{k.steps}</Typography>}
+            </Box>
+            {!ok && <Button size="small" variant="outlined" href={k.url} target="_blank" rel="noreferrer" endIcon={<OpenInNewIcon sx={{ fontSize: '14px !important' }} />}
+              sx={{ flexShrink: 0, borderRadius: 2 }}>Get free key</Button>}
+          </Box>
+        );
+      })}
     </Box>
   );
 }
@@ -335,14 +372,15 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
           </>
         ) : (
           <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            {providers.length > 0 && <FreeKeysGuide providers={providers} />}
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
               Keys are tested, then saved only on this computer (keys.json next to server.js). Models appear instantly — no restart.
-              Tip: one free <b>OpenRouter</b> key unlocks hundreds of models, including Google and Claude (paid ones need credit).
             </Typography>
             {status.filter((s) => !s.ok && s.id !== 'ollama').map((s) => (
               <Typography key={s.id} sx={{ fontSize: 12.5, color: 'error.main' }}>{s.name}: {s.error}</Typography>
             ))}
-            {providers.map((p) => <ProviderRow key={p.id} p={p} onSaved={() => { loadProviders(); onRefresh(); }} />)}
+            {[...providers].sort((a, b) => (FREE_KEYS.findIndex((k) => k.id === a.id) + 1 || 99) - (FREE_KEYS.findIndex((k) => k.id === b.id) + 1 || 99))
+              .map((p) => <ProviderRow key={p.id} p={p} onSaved={() => { loadProviders(); onRefresh(); }} />)}
             {!providers.length && <CircularProgress size={24} sx={{ mx: 'auto', mt: 4 }} />}
             <CustomApiForm onAdded={() => { loadProviders(); onRefresh(); }} />
           </Box>

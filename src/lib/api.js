@@ -59,7 +59,7 @@ export const kbAddText = (id, name, text) => fetch(`/api/kb/${id}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, text }),
 }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
 
-export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, onNote, signal }) {
+export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, onNote, onTool, onMemory, onVerify, onStep, signal }) {
   const r = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,6 +88,10 @@ export async function streamChat(payload, { onText, onReasoning, onError, onUsag
         else if (ev.t === 'searching') onSearch?.({ searching: true, query: ev.v });
         else if (ev.t === 'search') onSearch?.({ searching: false, ...ev.v });
         else if (ev.t === 'note') onNote?.(ev.v);
+        else if (ev.t === 'tool') onTool?.(ev.v);
+        else if (ev.t === 'memory') onMemory?.(ev.v);
+        else if (ev.t === 'verify') onVerify?.(ev.v);
+        else if (ev.t === 'step') onStep?.(ev.v);
       } catch {}
     }
   }
@@ -107,6 +111,7 @@ const artifactNote = (attrs) => {
 };
 const slimOld = (s) => clip(s
   .replace(/<artifact\b([^>]*)>[\s\S]*?(<\/artifact>|$)/gi, (_, attrs) => artifactNote(attrs))
+  .replace(/<file\s+path=["']([^"']+)["'][^>]*>[\s\S]*?(<\/file>|$)/gi, (_, p) => `[file ${p} omitted to save tokens]`)
   .replace(/```[\s\S]*?```/g, (b) => (b.length > 600 ? '```\n[code omitted to save tokens]\n```' : b)), 1200, 'trimmed');
 // The model's private <thinking> notes are never sent back
 const noThinking = (s) => s.replace(/<thinking>[\s\S]*?(<\/thinking>|$)/gi, '').trim();

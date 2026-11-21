@@ -37,7 +37,7 @@ const GREETING = /^\s*(hi+|hello+|hey+|hai|vanakkam|வணக்கம்|thanks
 // "Do something for me" requests — including common typos ("buld", "bulid", "creat", "mak", "genrate", "wirte")
 const TASK = /^\s*(please\s+|pls\s+|plz\s+|can you\s+|could you\s+|i want( you)? to\s+|i need( you)? to\s+|help me( to)?\s+|let'?s\s+)?(write|wirte|wrte|create|creat|crate|build|buld|bulid|biuld|buil|make|mak|mke|generate|genrate|generte|code|implement|refactor|fix|debug|convert|translate|rewrite|rephrase|paraphrase|summari[sz]e|draft|compose|design|desgin|develop|devlop|format|correct|improve|optimi[sz]e|explain (this|the following|my) code|solve|plan|prepare|list)\b/i;
 // Things people ask the AI to BUILD — never a news search, even without a verb ("portfolio website for me")
-const BUILD_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|app|application|dashboard|component|ui|ux|frontend|front-end|backend|back-end|api|form|login page|signup page|todo|calculator|game|script|program|bot|chatbot|template|layout|navbar|footer|sql query|database schema)\b/i;
+const BUILD_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|app|application|dashboard|component|ui|ux|frontend|front-end|backend|back-end|api|form|login page|signup page|todo|calculator|game|script|program|bot|chatbot|template|layout|navbar|footer|sql query|database schema|project|system|software|tool|portal|platform|tracker|crud|management|admin panel|e-?commerce|store|shop|blog|clone|module|feature|page)\b/i;
 const BUILD_VERB = /\b(build|buld|bulid|biuld|create|creat|make|mak|develop|devlop|design|desgin|code|write|generate|genrate|need|want)\b/i;
 const CREATIVE = /\b(poem|story|kavithai|kadhai|கவிதை|கதை|lyrics|song lyrics|essay|joke|caption|slogan|quote for)\b/i;
 const MATH = /^[\d\s+\-*/().^%=x×÷]+$/;
@@ -65,8 +65,15 @@ export function needsSearch(q = '') {
 }
 
 // "Build me a website / portfolio / app / page…" (typos OK) — the app then asks for complete code with a live preview
-const WEB_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|dashboard|component|ui|form|login page|signup page|todo|calculator|game|navbar|footer|template|layout|app)\b/i;
+const WEB_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|dashboard|component|ui|form|login page|signup page|todo|calculator|game|navbar|footer|template|layout|app|application|project|system|software|tool|portal|platform|tracker|crud|management|admin panel|e-?commerce|store|shop|blog|clone|page)\b/i;
 export const isBuildRequest = (q = '') => BUILD_VERB.test(q) && WEB_THING.test(q) && !/\b(python|java\b|c\+\+|c#|golang|rust|php|sql|android|ios|flutter|kotlin|swift)\b/i.test(q);
+
+// "A full React + Vite project" (several files + ZIP) instead of one component:
+// any mention of Vite (incl. typos like "reactvite"), or a build request that asks for a full / complete / multi-file project
+const VITE = /vite/i;
+const FULL = /\b(project|full|complete|whole|multi[- ]?(page|file)s?|files|folder|structure|zip|download|production|deploy\w*|real (website|app)|system|management|portal|platform|crud|admin panel|e-?commerce|dashboard|clone)\b/i;
+export const isProjectRequest = (q = '') => !/\b(what is|explain|difference|vs\.?|versus|why)\b/i.test(q)
+  && ((VITE.test(q) && (BUILD_VERB.test(q) || q.trim().split(/\s+/).length <= 6)) || (isBuildRequest(q) && FULL.test(q)));
 
 // ---------- relevance (keeps cards & related topics on-topic) ----------
 const STOP = new Set('the and for with what who whom whose when where which why how are was were this that from into about explain tell give show simple example examples please you your his her their its in on of to is a an me my doing going'.split(' '));
@@ -122,7 +129,7 @@ async function wikipedia(q) {
 }
 
 // ---------- deeper data for the main topic ----------
-const WUA = { 'User-Agent': 'AllInOneAI/1.0 (local app)' };
+const WUA = { 'User-Agent': 'Evolvix/1.0 (local app)' };
 // Wikimedia limits bursts of requests: cache results for a day and retry once when told "too many requests"
 const DAY_CACHE = new Map();
 async function wmJson(url) {

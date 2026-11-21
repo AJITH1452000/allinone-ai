@@ -34,9 +34,9 @@ main{max-width:760px;margin:0 auto;padding:32px 16px}h1.t{font-size:24px;margin:
 .m{margin:0 0 22px}.who{font-size:12.5px;font-weight:600;color:#6b6963;margin-bottom:4px}
 .user .c{background:#efede6;border-radius:16px;padding:10px 16px;display:inline-block;max-width:85%}
 pre{background:#1e1e22;color:#e6e6ea;padding:14px 16px;border-radius:12px;overflow:auto;font-size:13px}
-code{font-family:ui-monospace,Consolas,monospace}a{color:#c2593a}footer{color:#999;font-size:12px;margin-top:32px}
+code{font-family:ui-monospace,Consolas,monospace}a{color:#5b4cf0}footer{color:#999;font-size:12px;margin-top:32px}
 </style></head><body><main><h1 class="t">${esc(chat.title)}</h1>${body}
-<footer>Shared from All-in-One AI · ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</footer></main></body></html>`;
+<footer>Shared from Evolvix · ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</footer></main></body></html>`;
 };
 
 export default function ShareDialog({ chat, onClose }) {

@@ -31,5 +31,18 @@ export const buildSystem = (s) => {
   const concise = s.concise ? 'Be concise: answer directly, no filler or repetition. For code edits, show only the changed parts unless asked for the full file.' : '';
   const p = s.profile || {};
   const about = [p.callMe || p.name ? `The user's name is ${p.callMe || p.name}.` : '', p.work ? `They work as: ${p.work}.` : ''].filter(Boolean).join(' ');
-  return [persona.prompt, about, s.customSystem, lang?.rule, concise].filter(Boolean).join('\n\n');
+  const mem = s.memoryOn !== false && s.memories?.length
+    ? `Long-term memory — facts the user asked you to remember (use them when relevant, never mention this list unless asked):\n${s.memories.map((m) => `- ${m.text}`).join('\n')}`
+    : '';
+  return [persona.prompt, about, s.customSystem, mem, lang?.rule, concise].filter(Boolean).join('\n\n');
 };
+
+// "Remember that I prefer TypeScript" / "keep in mind …" / Tanglish "nyabagam vechuko …"
+const REMEMBER = /^\s*(?:please\s+|pls\s+)?(?:remember|keep in mind|don'?t forget|note)(?:\s+that)?[:,\s]+(.{3,300}?)[.!]?\s*$/i;
+const REMEMBER_TA = /^\s*(.{3,300}?)[,\s]+(?:nyabagam|gnabagam|ஞாபகம்)\s*(?:vechuko|vechukko|வச்சுக்கோ)\s*[.!]?\s*$/i;
+export const rememberedFact = (text = '') => (REMEMBER.exec(text)?.[1] || REMEMBER_TA.exec(text)?.[1] || '').trim();
+
+// Looks like a password / API key / card number? (warn before sending it to a cloud AI)
+export const looksSecret = (text = '') => /\b(sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|gsk_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|xox[bp]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})\b/.test(text)
+  || /\b(password|passwd|pwd|otp|pin)\s*[:=]\s*\S{4,}/i.test(text)
+  || /\b(?:\d[ -]?){15,16}\b/.test(text);

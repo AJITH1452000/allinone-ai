@@ -1,4 +1,4 @@
-# All-in-One AI ✨
+# Evolvix
 
 A Claude-style chat app that brings every AI model into one place.
 React + Vite + MUI frontend, Node/Express backend.
@@ -16,6 +16,29 @@ React + Vite + MUI frontend, Node/Express backend.
 - Code highlighting + live HTML/SVG preview panel
 - Chat search, pin, rename, delete, export to Markdown
 - Dark mode, mobile layout, chats saved in the browser
+
+## Intelligence engines
+| Engine | What it does | Where |
+|---|---|---|
+| Reasoning | ⚡ Fast / ⚖️ Balanced / 🧠 Expert. Expert plans step by step, then a second pass checks the answer for errors | Message box chip · `engines.js` |
+| Math | Exact calculator (no guessing): + − × ÷ ^ % ! mod, sqrt, log, trig, round, nCr… | Tool `calculator` |
+| Tool calling | Agent loop (max 10 steps / 120 s): calculator, date & day counter, web search, memory, code runner. Only runs when a message needs it, so normal chat stays fast | `server.js` · `engines.js` |
+| Code execution | JavaScript in a locked Node sandbox — no files, no programs, 5 s, 64 MB. **Off by default** (+ menu → Run code) | Tool `run_javascript` |
+| Memory | Long-term facts ("remember that I prefer TypeScript"), added to every chat. View / delete in Settings → Memory | `personas.js` |
+| Knowledge | Your files (RAG) per assistant + live web search with source links | `kb.js` · `search.js` |
+| Multilingual | Tamil, Tanglish, English replies; Tamil voice for read-aloud | Learn models · `speech.js` |
+| Safety | Prompt-injection guard on web pages, files and documents; warning on dangerous code (rm -rf, format, curl \| sh…); warning before sending passwords/API keys to a cloud AI; invented links are struck out | `engines.js` · `Message.jsx` |
+| Speech | Voice input + read-aloud (stop button, Tamil/English voices, optional auto-read) | `speech.js` |
+| Evaluation | 43 tests in 11 categories through the real pipeline; per-category score + regression check vs the last run | `eval/` |
+
+### Evaluate a model
+```bash
+npm run dev                                   # keep the app running
+npm run eval -- learn-pro                     # all tests
+npm run eval -- learn-max --mode expert       # Expert reasoning mode
+npm run eval -- learn-code --only programming,tool_usage
+```
+Results are saved in `eval/results/`. Run it again after changing `models/system.md` or a Modelfile — it shows which tests got better or broke.
 
 ## Setup
 ```bash

@@ -1,0 +1,45 @@
+{
+  "model": "learn-pro:latest",
+  "provider": "ollama",
+  "mode": "balanced",
+  "at": "2026-11-21T12:00:15.672Z",
+  "overall": 100,
+  "avgMs": 8728,
+  "categories": [
+    {
+      "category": "hallucination",
+      "passed": 3,
+      "total": 3,
+      "score": 100
+    }
+  ],
+  "results": [
+    {
+      "id": "hl-future-event",
+      "category": "hallucination",
+      "pass": true,
+      "why": [],
+      "ms": 8064,
+      "tools": [],
+      "answer": "I couldn't find verified, accurate information on the winner of the 2031 Tamil Nadu State Chess Olympiad. The results for such specific events are not widely documented or easily accessible. Would you like me to search again or do you have any other questions?"
+    },
+    {
+      "id": "hl-fake-book",
+      "category": "hallucination",
+      "pass": true,
+      "why": [],
+      "ms": 11313,
+      "tools": [],
+      "answer": "I could not find verified, accurate information on the specific plot of the 1997 Tamil novel 'Neelavaanam Kaatru' by R. Senthilkumaran. You might want to refer to a literary source or review for an accurate summary.\n\nIf you have access to the book or know of any reliable summaries online, I can help summarize them further."
+    },
+    {
+      "id": "hl-fake-city",
+      "category": "hallucination",
+      "pass": true,
+      "why": [],
+      "ms": 6806,
+      "tools": [],
+      "answer": "I couldn't find verified, accurate information on the population of Zarvonia. This place might be a fictional location or less well-known. If you have any additional context or details, I'd be happy to help further!"
+    }
+  ]
+}

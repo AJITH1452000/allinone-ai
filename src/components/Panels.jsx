@@ -55,7 +55,7 @@ export function SearchDialog({ open, onClose, chats, onOpen, onNew }) {
   const mark = (text) => {
     const s = q.trim(); if (!s) return text;
     const i = text.toLowerCase().indexOf(s.toLowerCase()); if (i < 0) return text;
-    return <>{text.slice(0, i)}<Box component="mark" sx={{ bgcolor: 'rgba(201,100,66,.22)', color: 'inherit', borderRadius: '3px', px: 0.2 }}>{text.slice(i, i + s.length)}</Box>{text.slice(i + s.length)}</>;
+    return <>{text.slice(0, i)}<Box component="mark" sx={{ bgcolor: 'rgba(91,76,240,.2)', color: 'inherit', borderRadius: '3px', px: 0.2 }}>{text.slice(i, i + s.length)}</Box>{text.slice(i + s.length)}</>;
   };
 
   return (

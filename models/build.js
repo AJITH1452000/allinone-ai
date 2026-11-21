@@ -13,7 +13,8 @@ const family = JSON.parse(fs.readFileSync(path.join(dir, 'family.json'), 'utf8')
 const winExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe');
 const OLLAMA = os.platform() === 'win32' && fs.existsSync(winExe) ? winExe : 'ollama';
 
-const TIERS = ['lite', 'pro', 'max', 'code'];
+// codeplus = your fine-tuned Learn Code+ (created by: npm run import-model -- file.gguf)
+const TIERS = ['lite', 'pro', 'max', 'code', 'codeplus'].filter((t) => fs.existsSync(path.join(dir, `Modelfile.${t}`)));
 const pick = process.argv.slice(2);
 const todo = pick.length ? pick : TIERS;
 const run = (...args) => spawnSync(OLLAMA, args, { stdio: 'inherit' }).status === 0;
@@ -24,10 +25,12 @@ for (const tier of todo) {
   const core = fs.readFileSync(path.join(dir, 'system.md'), 'utf8').trim().replaceAll('"""', "'''");
   const text = fs.readFileSync(src, 'utf8').replaceAll('{{CORE}}', core)
     .replaceAll('{{NAME}}', family.name).replaceAll('{{COMPANY}}', family.company);
-  const base = text.match(/^FROM\s+(\S+)/m)[1];
+  const base = text.match(/^FROM\s+(.+?)\s*$/m)[1];
   const name = `${family.id}-${tier}`;
   console.log(`\n=== ${name}  (${family.name} ${tier[0].toUpperCase() + tier.slice(1)}, base: ${base}) ===`);
-  if (!run('pull', base)) { console.error(`Could not download ${base}. Is Ollama running?`); continue; }
+  const localFile = /\.gguf$/i.test(base) || /^[a-z]:[\\/]|^[./\\]/i.test(base);
+  if (localFile && !fs.existsSync(base)) { console.error(`Model file not found: ${base} (is the external disk plugged in?)`); continue; }
+  if (!localFile && !run('pull', base)) { console.error(`Could not download ${base}. Is Ollama running?`); continue; }
   const tmp = path.join(os.tmpdir(), `Modelfile.${name}`);
   fs.writeFileSync(tmp, text);
   if (run('create', name, '-f', tmp)) console.log(`✔ ${name} ready`);

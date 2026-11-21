@@ -7,7 +7,11 @@
     "dev": "concurrently -k -n api,web -c blue,green \"node --watch server.js\" \"vite\"",
     "build": "vite build",
     "start": "node server.js",
-    "build-models": "node models/build.js"
+    "build-models": "node models/build.js",
+    "eval": "node eval/run.js",
+    "storage": "node training/storage.mjs",
+    "make-notebook": "node training/make-notebook.mjs",
+    "import-model": "node training/import-model.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.13.0",

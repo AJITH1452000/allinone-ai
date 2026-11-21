@@ -1,0 +1,86 @@
+{
+  "model_name": "Learn Code+",
+  "ollama_name": "learn-codeplus",
+  "base_model": "unsloth/Qwen2.5-Coder-7B-Instruct-bnb-4bit",
+  "training_objective": "advanced_coding_intelligence",
+
+  "dataset_mix": {
+    "_note": "Percent of the final training set. Examples are sorted into these categories by what the instruction asks for.",
+    "code_generation": 20,
+    "debugging": 15,
+    "code_reasoning": 15,
+    "software_architecture": 10,
+    "algorithms_and_dsa": 10,
+    "code_refactoring": 10,
+    "unit_testing": 5,
+    "code_explanation": 5,
+    "security_and_best_practices": 5,
+    "general_reasoning": 5
+  },
+
+  "total_examples": 24000,
+
+  "sources": [
+    { "id": "bigcode/self-oss-instruct-sc2-exec-filter-50k", "license": "odc-by", "made_by": "StarCoder2 (open model)", "clean": true,
+      "prompt": "instruction", "answer": "response" },
+    { "id": "nvidia/OpenCodeInstruct", "license": "cc-by-4.0", "made_by": "Qwen2.5 (open model), solutions checked by unit tests", "clean": true,
+      "prompt": "input", "answer": "output", "min_test_score": 1.0, "scan_limit": 300000, "unit_tests_column": "unit_tests" },
+    { "id": "openai/gsm8k", "config": "main", "license": "mit", "made_by": "humans", "clean": true,
+      "prompt": "question", "answer": "answer", "category": "general_reasoning", "gsm8k_cleanup": true },
+    { "id": "ise-uiuc/Magicoder-Evol-Instruct-110K", "license": "apache-2.0", "made_by": "GPT-4 (OpenAI terms apply)", "clean": false,
+      "prompt": "instruction", "answer": "response" },
+    { "id": "m-a-p/CodeFeedback-Filtered-Instruction", "license": "apache-2.0", "made_by": "mixed, partly GPT-4 (OpenAI terms apply)", "clean": false,
+      "prompt": "query", "answer": "answer" },
+    { "id": "ise-uiuc/Magicoder-OSS-Instruct-75K", "license": "mit", "made_by": "GPT-3.5 (OpenAI terms apply)", "clean": false,
+      "prompt": "problem", "answer": "solution" }
+  ],
+  "use_only_clean_sources": true,
+  "license_allowlist": ["mit", "apache-2.0", "bsd-2-clause", "bsd-3-clause", "cc-by-4.0", "cc-by-sa-4.0", "cc0-1.0", "odc-by", "unlicense"],
+
+  "preprocessing": {
+    "format": "jsonl",
+    "remove_exact_duplicates": true,
+    "remove_near_duplicates": true,
+    "remove_empty_answers": true,
+    "remove_placeholder_content": true,
+    "preserve_source_metadata": true,
+    "verify_license": true,
+    "validate_code_examples": true,
+    "min_answer_chars": 40,
+    "max_tokens_per_example": 2048,
+    "train_validation_test_split": [0.96, 0.02, 0.02],
+    "seed": 42
+  },
+
+  "training": {
+    "method": "qlora_sft",
+    "epochs": 1,
+    "learning_rate": 0.0002,
+    "batch_size": 2,
+    "gradient_accumulation_steps": 8,
+    "max_sequence_length": 2048,
+    "warmup_ratio": 0.03,
+    "weight_decay": 0.01,
+    "lr_scheduler": "cosine",
+    "optimizer": "adamw_8bit",
+    "max_grad_norm": 1.0,
+    "logging_steps": 10,
+    "save_steps": 250,
+    "save_total_limit": 3,
+    "packing": true,
+    "_precision_note": "Kaggle T4 GPUs have no bf16 — fp16 is used automatically."
+  },
+
+  "lora": { "rank": 16, "alpha": 32, "dropout": 0.05,
+    "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"] },
+
+  "preference_optimization": {
+    "enabled": false,
+    "_note": "Stage 2 (DPO). Needs preference pairs: export them from the app (Settings → Data → Export training data) after rating answers 👍/👎.",
+    "beta": 0.1, "learning_rate": 0.000005, "epochs": 1
+  },
+
+  "coding_evaluation": { "held_out_problems": 60, "timeout_seconds": 10 },
+
+  "export": { "gguf_quantization": "q4_k_m" }
+}

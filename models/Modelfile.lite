@@ -1,11 +1,15 @@
-# {{NAME}} Lite — fastest, smallest model (like "Haiku"). Best for quick questions on any PC.
+# {{NAME}} Lite — fastest model (like "Haiku"). Gemma 3 4B, QAT 4-bit compressed (4 GB). Understands images.
 # Main instructions come from models/system.md — edit that one file to change all three models.
-FROM gemma3:1b
+FROM gemma3:4b-it-qat
 
-PARAMETER temperature 0.3
+PARAMETER temperature 0.7
 PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.15
-PARAMETER num_ctx 4096
+PARAMETER top_k 50
+PARAMETER min_p 0.05
+PARAMETER repeat_penalty 1.08
+PARAMETER num_predict 4096
+PARAMETER num_ctx 8192
+
 
 SYSTEM """
 You are {{NAME}} Lite, the fast model of the {{NAME}} AI family ({{NAME}} Lite, {{NAME}} Pro, {{NAME}} Max), made by {{COMPANY}}.

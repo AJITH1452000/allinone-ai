@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, ButtonBase, Collapse, IconButton, List, ListItemButton, ListItemText, Menu, MenuItem, ListItemIcon, TextField, Tooltip, Typography } from '@mui/material';
+import { BRAND_GRADIENT } from '../brand';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
@@ -9,7 +10,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import WidgetsOutlinedIcon from '@mui/icons-material/WidgetsOutlined';
@@ -18,6 +18,7 @@ import DataUsageOutlinedIcon from '@mui/icons-material/DataUsageOutlined';
 import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import AccountMenu, { initials } from './AccountMenu';
 import ChatMenu from './ChatMenu';
+import Logo from './Logo';
 
 const SectionTitle = ({ children, open, onToggle }) => (
   <ButtonBase onClick={onToggle} disabled={!onToggle} sx={{ gap: 0.25, mx: 1, mt: 2, mb: 0.5, px: 0.5, borderRadius: 1, fontSize: 12.5, color: 'text.secondary', fontWeight: 500, alignSelf: 'flex-start' }}>
@@ -90,7 +91,7 @@ export default function Sidebar({
   // ---------- collapsed: icon rail (like Claude / Gemini) ----------
   if (collapsed) {
     return (
-      <Box sx={{ width: 56, height: '100%', bgcolor: 'background.side', display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1.25, gap: 0.5, borderRight: 1, borderColor: 'divider' }}>
+      <Box sx={{ width: 56, height: '100%', bgcolor: 'background.side', backdropFilter: 'saturate(160%) blur(20px)', display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1.25, gap: 0.5, borderRight: 1, borderColor: 'divider' }}>
         <Tooltip title="Open sidebar (Ctrl+B)" placement="right"><IconButton onClick={onToggleCollapse}><ViewSidebarOutlinedIcon sx={{ fontSize: 20 }} /></IconButton></Tooltip>
         <Box sx={{ height: 8 }} />
         {NAV.map(([id, Icon, label, key]) => (
@@ -100,7 +101,7 @@ export default function Sidebar({
         ))}
         <Box sx={{ flex: 1 }} />
         <Tooltip title={settings.profile?.name || 'Account'} placement="right">
-          <ButtonBase onClick={() => onAction('settings')} sx={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg,#c96442,#7c5cff)', color: '#fff', fontSize: 13, fontWeight: 700 }}>
+          <ButtonBase onClick={() => onAction('settings')} sx={{ width: 32, height: 32, borderRadius: '50%', background: BRAND_GRADIENT, color: '#fff', fontSize: 13, fontWeight: 700 }}>
             {initials(settings.profile?.name || 'You')}
           </ButtonBase>
         </Tooltip>
@@ -122,15 +123,12 @@ export default function Sidebar({
   );
 
   return (
-    <Box sx={{ width: 272, height: '100%', bgcolor: 'background.side', display: 'flex', flexDirection: 'column', borderRight: 1, borderColor: 'divider' }}>
+    <Box sx={{ width: 272, height: '100%', bgcolor: 'background.side', backdropFilter: 'saturate(160%) blur(20px)', WebkitBackdropFilter: 'saturate(160%) blur(20px)', display: 'flex', flexDirection: 'column', borderRight: 1, borderColor: 'divider' }}>
       {/* Top: collapse + brand + new chat */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, pt: 1.5, pb: 1 }}>
         <Tooltip title="Close sidebar (Ctrl+B)"><IconButton size="small" onClick={onToggleCollapse}><ViewSidebarOutlinedIcon sx={{ fontSize: 20 }} /></IconButton></Tooltip>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 0.5, flex: 1, minWidth: 0 }}>
-          <Box sx={{ width: 22, height: 22, borderRadius: '7px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#c96442,#7c5cff)', flexShrink: 0 }}>
-            <AutoAwesomeIcon sx={{ fontSize: 13, color: '#fff' }} />
-          </Box>
-          <Typography noWrap sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontWeight: 600, fontSize: 20, letterSpacing: '-0.02em' }}>All-in-One AI</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.75, flex: 1, minWidth: 0 }}>
+          <Logo size={24} fontSize={19} />
         </Box>
         <Tooltip title="New chat (Ctrl+Shift+O)"><IconButton size="small" onClick={() => onNav('new')}><ChatBubbleOutlineIcon sx={{ fontSize: 19 }} /></IconButton></Tooltip>
       </Box>

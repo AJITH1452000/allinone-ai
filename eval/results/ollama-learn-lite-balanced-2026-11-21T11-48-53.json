@@ -1,0 +1,54 @@
+{
+  "model": "learn-lite:latest",
+  "provider": "ollama",
+  "mode": "balanced",
+  "at": "2026-11-21T11:48:53.731Z",
+  "overall": 100,
+  "avgMs": 8642,
+  "categories": [
+    {
+      "category": "multilingual",
+      "passed": 4,
+      "total": 4,
+      "score": 100
+    }
+  ],
+  "results": [
+    {
+      "id": "ml-tamil-capital",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 19265,
+      "tools": [],
+      "answer": "சென்னை."
+    },
+    {
+      "id": "ml-translate-ta",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 11971,
+      "tools": [],
+      "answer": "காலை வணக்கம், எப்படி இருக்கிறீர்கள்? (Kaalai vanakkam, eppadi irukkiren?)"
+    },
+    {
+      "id": "ml-tanglish",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 2308,
+      "tools": [],
+      "answer": "Naan nalla irukken! Enna help venum? 😊"
+    },
+    {
+      "id": "ml-translate-en",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 1022,
+      "tools": [],
+      "answer": "Thank you."
+    }
+  ]
+}

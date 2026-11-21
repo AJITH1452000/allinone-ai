@@ -1,0 +1,56 @@
+{
+  "model": "learn-pro:latest",
+  "provider": "ollama",
+  "mode": "balanced",
+  "at": "2026-11-21T11:50:21.550Z",
+  "overall": 75,
+  "avgMs": 14836,
+  "categories": [
+    {
+      "category": "multilingual",
+      "passed": 3,
+      "total": 4,
+      "score": 75
+    }
+  ],
+  "results": [
+    {
+      "id": "ml-tamil-capital",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 34968,
+      "tools": [],
+      "answer": "தமிழ்நாட்டின் தலைநகரம் சென்னையாகும். அவள் மிகப் பெரிய நகராலும், இன்றுத Tennesseeவாலும் வெற்றி வைத்திருக்கின்றாள்."
+    },
+    {
+      "id": "ml-translate-ta",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 5302,
+      "tools": [],
+      "answer": "உலக வணக்கம், எப்படி விழுவீர்கள்?"
+    },
+    {
+      "id": "ml-tanglish",
+      "category": "multilingual",
+      "pass": true,
+      "why": [],
+      "ms": 16940,
+      "tools": [],
+      "answer": "Naan nalla irukken, நன்றி அனைத்து வலியுடன்! எப்படி உங்கள் வருவாக இருக்கிறது? என்னையும் எப்போதும் உறுதியாக அழைத்தல் விரும்புகிறேன்."
+    },
+    {
+      "id": "ml-translate-en",
+      "category": "multilingual",
+      "pass": false,
+      "why": [
+        "doesn't match /thank/"
+      ],
+      "ms": 2134,
+      "tools": [],
+      "answer": "You're welcome! Is there anything else I can help with?"
+    }
+  ]
+}

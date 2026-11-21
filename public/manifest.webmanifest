@@ -1,10 +1,10 @@
 {
-  "name": "All-in-One AI",
-  "short_name": "AI",
+  "name": "Evolvix",
+  "short_name": "Evolvix",
   "description": "Your Learn models, Gemini, Claude & ChatGPT in one place",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fbfaf7",
-  "theme_color": "#c2593a",
+  "background_color": "#f5f6fb",
+  "theme_color": "#4f46e5",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

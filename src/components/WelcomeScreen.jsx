@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Button, MenuItem, TextField, Typography } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import { LogoMark, BRAND } from './Logo';
 
 const WORK = ['Software developer', 'Student', 'Teacher', 'Designer', 'Business owner', 'Data / AI', 'Writer / Content creator', 'Government exam aspirant', 'Other'];
 
@@ -12,13 +12,11 @@ export default function WelcomeScreen({ profile = {}, onContinue }) {
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2, bgcolor: 'background.default',
-      backgroundImage: (t) => `radial-gradient(1200px 500px at 50% -10%, ${t.palette.mode === 'dark' ? 'rgba(124,92,255,.18)' : 'rgba(201,100,66,.12)'}, transparent)` }}>
+      backgroundImage: (t) => `radial-gradient(1200px 500px at 50% -10%, ${t.palette.mode === 'dark' ? 'rgba(124,58,237,.22)' : 'rgba(79,70,229,.14)'}, transparent)` }}>
       <Box sx={{ width: '100%', maxWidth: 400, textAlign: 'center', animation: 'fadeUp .4s ease both' }}>
-        <Box sx={{ width: 52, height: 52, mx: 'auto', borderRadius: '15px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#c96442,#7c5cff)', mb: 2.5 }}>
-          <AutoAwesomeIcon sx={{ color: '#fff', fontSize: 28 }} />
-        </Box>
+        <LogoMark size={56} sx={{ mx: 'auto', mb: 2.5 }} />
         <Typography sx={{ fontSize: 28, fontWeight: 650, letterSpacing: '-0.02em' }}>
-          {profile.name ? `Welcome back, ${profile.name.split(' ')[0]}` : 'Welcome to All-in-One AI'}
+          {profile.name ? `Welcome back, ${profile.name.split(' ')[0]}` : `Welcome to ${BRAND}`}
         </Typography>
         <Typography sx={{ color: 'text.secondary', fontSize: 14.5, mt: 0.75, mb: 3.5 }}>
           Your Learn models, Gemini, Claude & ChatGPT — in one place.

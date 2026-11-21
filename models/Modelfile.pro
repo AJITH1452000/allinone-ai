@@ -1,11 +1,15 @@
-# {{NAME}} Pro — balanced everyday model (like "Sonnet"). Understands images. Good Tamil + English.
+# {{NAME}} Pro — balanced everyday model (like "Sonnet"). Qwen 2.5 7B, 4-bit compressed (4.7 GB) — fits mostly on a 4 GB GPU, so it stays fast.
 # Main instructions come from models/system.md — edit that one file to change all three models.
-FROM gemma3:4b
+FROM qwen2.5:7b
 
-PARAMETER temperature 0.35
+PARAMETER temperature 0.65
 PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.1
+PARAMETER top_k 40
+PARAMETER min_p 0.05
+PARAMETER repeat_penalty 1.08
+PARAMETER num_predict 4096
 PARAMETER num_ctx 8192
+
 
 SYSTEM """
 You are {{NAME}} Pro, the balanced model of the {{NAME}} AI family ({{NAME}} Lite, {{NAME}} Pro, {{NAME}} Max), made by {{COMPANY}}.

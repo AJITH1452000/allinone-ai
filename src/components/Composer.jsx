@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Box, Paper, TextField, IconButton, Tooltip, Chip, Menu, MenuItem, ListItemIcon, Typography, Switch, Divider, alpha } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import { BRAND, BRAND_GRADIENT } from '../brand';
 import StopIcon from '@mui/icons-material/Stop';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import AddIcon from '@mui/icons-material/Add';
@@ -11,6 +12,15 @@ import CloseIcon from '@mui/icons-material/Close';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import { PERSONAS, LANG_MODES } from '../lib/personas';
 import LanguageIcon from '@mui/icons-material/Language';
+import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import TerminalIcon from '@mui/icons-material/Terminal';
+
+// Reasoning modes — Fast answers instantly, Expert thinks step by step and then checks its own answer
+export const REASONING_MODES = [
+  { id: 'fast', icon: '⚡', label: 'Fast', desc: 'Quick, short answers' },
+  { id: 'balanced', icon: '⚖️', label: 'Balanced', desc: 'Normal thinking — best for most things' },
+  { id: 'expert', icon: '🧠', label: 'Expert', desc: 'Plans step by step, then double-checks itself (slower)' },
+];
 
 const MAX_TEXT = 400_000;
 
@@ -36,6 +46,8 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
   const [listening, setListening] = useState(false);
   const [personaMenu, setPersonaMenu] = useState(null);
   const [plusMenu, setPlusMenu] = useState(null);
+  const [modeMenu, setModeMenu] = useState(null);
+  const mode = REASONING_MODES.find((m) => m.id === (settings.reasoning || 'balanced')) || REASONING_MODES[1];
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef();
   const recRef = useRef(null);
@@ -54,7 +66,7 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
 
   const submit = () => {
     if (streaming || disabled || (!text.trim() && !images.length && !files.length)) return;
-    onSend({ text: text.trim(), images, files });
+    if (onSend({ text: text.trim(), images, files }) === false) return; // e.g. you cancelled the "looks like a password" warning
     setText(''); setImages([]); setFiles([]);
   };
 
@@ -84,9 +96,11 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
-      sx={{ border: 1, borderColor: dragOver ? 'primary.main' : 'divider', borderRadius: '24px', p: 1, pl: 1.25, bgcolor: 'background.paper',
-        boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 28px -10px rgba(0,0,0,.14)', transition: 'border-color .2s, box-shadow .2s',
-        '&:focus-within': { borderColor: 'primary.main', boxShadow: (t) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.12)}, 0 8px 28px -10px rgba(0,0,0,.14)` } }}>
+      sx={{ border: 1, borderColor: dragOver ? 'primary.main' : (t) => (t.palette.mode === 'light' ? 'rgba(255,255,255,.8)' : 'rgba(255,255,255,.1)'), borderRadius: '24px', p: 1, pl: 1.25,
+        bgcolor: (t) => (t.palette.mode === 'light' ? 'rgba(255,255,255,.66)' : 'rgba(24,24,38,.62)'),
+        backdropFilter: 'saturate(170%) blur(22px)', WebkitBackdropFilter: 'saturate(170%) blur(22px)',
+        boxShadow: '0 1px 2px rgba(20,20,60,.05), 0 12px 36px -12px rgba(40,30,120,.22)', transition: 'border-color .25s, box-shadow .25s, transform .25s',
+        '&:focus-within': { borderColor: 'primary.main', boxShadow: (t) => `0 0 0 4px ${alpha(t.palette.primary.main, 0.14)}, 0 16px 44px -12px ${alpha(BRAND.indigo, 0.4)}` } }}>
       {(images.length > 0 || files.length > 0) && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1, px: 0.5 }}>
           {images.map((src, i) => (
@@ -128,6 +142,11 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
             {listening ? <MicOffIcon fontSize="small" /> : <MicIcon fontSize="small" />}
           </IconButton>
         </Tooltip>
+        <Tooltip title={`Reasoning: ${mode.desc}`}>
+          <Chip size="small" variant={mode.id === 'balanced' ? 'outlined' : 'filled'} color={mode.id === 'expert' ? 'primary' : 'default'}
+            onClick={(e) => setModeMenu(e.currentTarget)} label={`${mode.icon} ${mode.label}`}
+            sx={{ borderRadius: '8px', fontSize: 12.5, borderColor: 'divider' }} />
+        </Tooltip>
         <Chip size="small" variant="outlined" onClick={(e) => setPersonaMenu(e.currentTarget)}
           label={`${persona.icon} ${persona.name.split(' ')[0]} · ${LANG_MODES.find((l) => l.id === settings.lang)?.label || 'Auto'}${settings.concise ? ' · Short' : ''}`}
           sx={{ maxWidth: 240, borderRadius: '8px', fontSize: 12.5, borderColor: 'divider' }} />
@@ -136,8 +155,10 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
           <Tooltip title="Stop"><IconButton onClick={onStop} sx={{ width: 34, height: 34, bgcolor: 'text.primary', color: 'background.paper', '&:hover': { bgcolor: 'text.secondary' } }}><StopIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         ) : (
           <IconButton onClick={submit} disabled={disabled || (!text.trim() && !images.length && !files.length)}
-            sx={{ width: 34, height: 34, bgcolor: 'text.primary', color: 'background.paper', transition: '.15s',
-              '&:hover': { bgcolor: 'primary.main', color: '#fff' }, '&.Mui-disabled': { bgcolor: 'action.disabledBackground', color: 'background.paper' } }}>
+            sx={{ width: 34, height: 34, background: BRAND_GRADIENT, color: '#fff', transition: 'transform .15s, box-shadow .2s',
+              boxShadow: `0 6px 16px -6px ${alpha(BRAND.indigo, 0.7)}`,
+              '&:hover': { transform: 'translateY(-1px) scale(1.05)', boxShadow: `0 10px 22px -8px ${alpha(BRAND.indigo, 0.8)}` },
+              '&.Mui-disabled': { background: 'none', bgcolor: 'action.disabledBackground', color: 'background.paper', boxShadow: 'none' } }}>
             <ArrowUpwardIcon fontSize="small" />
           </IconButton>
         )}
@@ -158,6 +179,32 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
           <MenuItem key={v} onClick={() => { setSettings({ ...settings, webSearch: v }); setPlusMenu(null); }} sx={{ borderRadius: '8px', mx: 0.75 }}>
             <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>{l}</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>{d}</Typography></Box>
             {(settings.webSearch || 'auto') === v && <CheckIcon fontSize="small" sx={{ color: 'primary.main' }} />}
+          </MenuItem>
+        ))}
+        <Divider sx={{ my: 0.5 }} />
+        <Typography sx={{ px: 2, py: 0.5, fontSize: 11.5, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <BuildOutlinedIcon sx={{ fontSize: 15 }} /> Tools
+        </Typography>
+        <MenuItem onClick={() => setSettings({ ...settings, tools: (settings.tools || 'auto') === 'off' ? 'auto' : 'off' })} sx={{ borderRadius: '8px', mx: 0.75 }}>
+          <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>Use tools</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>Exact calculator, dates, memory, web search</Typography></Box>
+          <Switch size="small" checked={(settings.tools || 'auto') !== 'off'} />
+        </MenuItem>
+        <MenuItem onClick={() => setSettings({ ...settings, allowCode: !settings.allowCode })} sx={{ borderRadius: '8px', mx: 0.75 }}>
+          <ListItemIcon><TerminalIcon fontSize="small" /></ListItemIcon>
+          <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>Run code</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>AI may run JavaScript in a locked sandbox</Typography></Box>
+          <Switch size="small" checked={!!settings.allowCode} />
+        </MenuItem>
+      </Menu>
+
+      <Menu anchorEl={modeMenu} open={!!modeMenu} onClose={() => setModeMenu(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }} transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{ sx: { borderRadius: '14px', minWidth: 280, mt: -1 } }} MenuListProps={{ dense: true }}>
+        <Typography sx={{ px: 2, py: 0.5, fontSize: 11.5, color: 'text.secondary' }}>Reasoning mode</Typography>
+        {REASONING_MODES.map((m) => (
+          <MenuItem key={m.id} onClick={() => { setSettings({ ...settings, reasoning: m.id }); setModeMenu(null); }} sx={{ borderRadius: '8px', mx: 0.75, py: 0.9 }}>
+            <ListItemIcon sx={{ fontSize: 18 }}>{m.icon}</ListItemIcon>
+            <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>{m.label}</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>{m.desc}</Typography></Box>
+            {mode.id === m.id && <CheckIcon fontSize="small" sx={{ color: 'primary.main' }} />}
           </MenuItem>
         ))}
       </Menu>

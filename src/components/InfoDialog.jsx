@@ -85,7 +85,7 @@ const PAGES = {
       <Typography sx={{ flex: 1, fontSize: 14 }}>{l}</Typography><Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{k}</Typography>
     </Box>
   )) },
-  about: { title: 'About All-in-One AI', body: () => (
+  about: { title: 'About Evolvix', body: () => (
     <Typography sx={{ fontSize: 14, lineHeight: 1.7 }}>
       One place for your own <b>Learn</b> models (Lite, Pro, Max), any Ollama model, and cloud AI like <b>Google Gemini</b>, <b>Claude</b> and <b>ChatGPT</b>.
       Build assistants with your own files, preview web pages and React components live, and track usage and cost — all running on your computer.
@@ -102,7 +102,7 @@ const PAGES = {
   ) },
   models: { title: 'Your Learn models', body: () => (
     <Box sx={{ fontSize: 14, lineHeight: 1.7 }}>
-      {[['Learn Lite', 'gemma3:1b · fastest, quick answers'], ['Learn Pro', 'gemma3:4b · balanced, understands images'], ['Learn Max', 'qwen2.5:7b · best for coding & reasoning']].map(([n, d]) => (
+      {[['Learn Lite', 'gemma3 4B (4-bit) · fastest, understands images'], ['Learn Pro', 'qwen2.5 7B (4-bit) · balanced, everyday'], ['Learn Max', 'qwen2.5 14B (4-bit) · smartest, slower'], ['Learn Code', 'qwen2.5-coder 7B (4-bit) · best for coding']].map(([n, d]) => (
         <Box key={n} sx={{ py: 1, borderBottom: 1, borderColor: 'divider' }}><b>{n}</b> — {d}</Box>
       ))}
       <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mt: 1.5 }}>

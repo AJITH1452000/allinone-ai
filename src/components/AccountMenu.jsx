@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, ButtonBase, Divider, ListItemIcon, ListItemText, Menu, MenuItem, Typography } from '@mui/material';
+import { BRAND_GRADIENT } from '../brand';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import DataUsageOutlinedIcon from '@mui/icons-material/DataUsageOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
@@ -42,7 +43,7 @@ export default function AccountMenu({ profile = {}, settings, setSettings, onAct
           maxWidth: '100%', gap: 1, px: 0.75, py: 0.75, borderRadius: '10px', '&:hover': { bgcolor: 'action.hover' }, bgcolor: anchor ? 'action.selected' : 'transparent',
         }}>
           <Box sx={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', flexShrink: 0,
-            background: 'linear-gradient(135deg,#c96442,#7c5cff)', color: '#fff', fontSize: 11.5, fontWeight: 700 }}>{initials(name)}</Box>
+            background: BRAND_GRADIENT, color: '#fff', fontSize: 11.5, fontWeight: 700 }}>{initials(name)}</Box>
           <Typography noWrap sx={{ fontSize: 14.5, fontWeight: 600 }}>{name}</Typography>
           <Typography sx={{ fontSize: 14, color: 'text.secondary', flexShrink: 0 }}>· Free</Typography>
           <ExpandMoreRoundedIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
@@ -53,7 +54,7 @@ export default function AccountMenu({ profile = {}, settings, setSettings, onAct
         '&:hover': { bgcolor: 'action.hover' }, bgcolor: anchor ? 'action.selected' : 'transparent',
       }}>
         <Box sx={{ width: 32, height: 32, borderRadius: '50%', display: 'grid', placeItems: 'center', flexShrink: 0,
-          background: 'linear-gradient(135deg,#c96442,#7c5cff)', color: '#fff', fontSize: 13, fontWeight: 700 }}>{initials(name)}</Box>
+          background: BRAND_GRADIENT, color: '#fff', fontSize: 13, fontWeight: 700 }}>{initials(name)}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 600 }}>{name}</Typography>
           <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>Free · Local</Typography>
@@ -94,7 +95,7 @@ export default function AccountMenu({ profile = {}, settings, setSettings, onAct
           )),
         ]}
         {sub?.kind === 'more' && [
-          ['about', 'About All-in-One AI'], ['shortcuts', 'Keyboard shortcuts'], ['privacy', 'Privacy & your data'], ['models', 'About your Learn models'],
+          ['about', 'About Evolvix'], ['shortcuts', 'Keyboard shortcuts'], ['privacy', 'Privacy & your data'], ['models', 'About your Learn models'],
         ].map(([a, l]) => (
           <MenuItem key={a} onClick={() => go(a)} sx={{ borderRadius: '8px', mx: 0.75 }}>
             <ListItemText primaryTypographyProps={{ fontSize: 14 }}>{l}</ListItemText>

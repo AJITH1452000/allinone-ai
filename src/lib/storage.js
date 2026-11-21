@@ -22,6 +22,13 @@ export const DEFAULT_SETTINGS = {
   fontSize: 'default',
   enterToSend: true,
   webSearch: 'auto', // auto = search the web when the question needs fresh facts
+  reasoning: 'balanced', // fast / balanced / expert
+  tools: 'auto',     // auto = calculator, date, memory… when the message needs them; off = never
+  allowCode: false,  // let the AI run JavaScript in a sandbox (you turn this on)
+  memoryOn: true,    // long-term memory of facts you ask the AI to remember
+  memories: [],      // [{ id, text, at }]
+  autoSpeak: false,  // read every reply aloud
+  bigJobs: 'auto',   // full projects use a connected free online model (Gemini / Groq / OpenRouter) instead of the local one
   v: 2,
 };
 
