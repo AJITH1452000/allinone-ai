@@ -1,0 +1,15 @@
+# Never upload secrets or personal data to Vercel
+.env
+.env.*
+!.env.example
+keys.json
+data/
+tunnel/.token
+training/storage.json
+# Not needed on the live site
+node_modules/
+dist/
+eval/results/
+.vercel/
+*.log
+claude-local.cmd

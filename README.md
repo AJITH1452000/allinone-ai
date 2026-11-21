@@ -1,6 +1,8 @@
 # Evolvix
 
 A Claude-style chat app that brings every AI model into one place.
+
+**Live:** https://evolvix-wheat.vercel.app
 React + Vite + MUI frontend, Node/Express backend.
 
 ## Features

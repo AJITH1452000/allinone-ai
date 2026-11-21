@@ -12,3 +12,6 @@ training/storage.json
 
 # Secret key of the Learn tunnel guard
 tunnel/.token
+
+.env*
+!.env.example
