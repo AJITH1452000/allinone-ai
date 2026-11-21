@@ -12,13 +12,25 @@ export default function PasswordGate({ children }) {
 
   useEffect(() => {
     fetch('/api/auth').then((r) => r.json()).then((j) => setState(j.ok ? 'open' : 'locked')).catch(() => setState('open'));
+    // If the password is turned on (or the login expires) while the page is open,
+    // any API call answers 401 {auth:true} → show the login screen instead of empty model lists.
+    const orig = window.fetch;
+    window.fetch = async (...args) => {
+      const r = await orig(...args);
+      if (r.status === 401) {
+        r.clone().json().then((j) => { if (j?.auth) setState('locked'); }).catch(() => {});
+      }
+      return r;
+    };
+    return () => { window.fetch = orig; };
   }, []);
 
   const login = async (e) => {
     e.preventDefault(); setBusy(true); setErr('');
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
     setBusy(false);
-    if (r.ok) setState('open'); else setErr('Wrong password');
+    // Reload so every part of the app fetches its models again with the new login.
+    if (r.ok) window.location.reload(); else setErr('Wrong password');
   };
 
   if (state === 'open') return children;
