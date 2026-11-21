@@ -497,7 +497,7 @@ app.post('/api/chat', async (req, res) => {
     try {
       const r = await fetch(`${p.base}/chat/completions`, {
         method: 'POST', headers: headersFor(provider), signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(ms)]),
-        body: JSON.stringify({ model, stream: false, temperature, max_tokens: max,
+        body: JSON.stringify({ model, stream: false, temperature, max_tokens: max, ...(ownLearn ? { reasoning_effort: 'none' } : {}),
           messages: [...(system && !bare ? [{ role: 'system', content: system }] : []), ...(history ? msgs.slice(0, -1) : []),
             { role: 'user', content: ownLearn ? `${content} /no_think` : content }] }),
       });
@@ -768,7 +768,7 @@ After the last file: at most 3 short lines (how to run).)` }];
   //   explain code) → brief thinking, 2000 tokens · project → thinking, 8192 tokens · Extended thinking (message box) → always think
   const MEDIUM = /```|\b(package|packages|library|libraries|npm|pip|module|plugin|bug|error|errors|fix|fixed|debug|review|refactor|optimi[sz]e|not working|doesn'?t work|exception|crash|undefined|warning|component|explain (this|the|my) code|write (a|an|the|me)|function (that|to|which))\b/i;
   const level = projectMode ? 'project' : !hasImage && (isBuildRequest(lastText) || MEDIUM.test(lastText) || shortTopic) ? 'medium' : 'simple';
-  let thinkMax = 0;
+  let thinkMax = 0, thinkOff = false; // thinkOff: Ollama thinks by default — switch it off with the API setting (the /no_think text alone is ignored)
   if (ownLearn) {
     const think = !!extendedThinking || reasoning === 'expert' || level !== 'simple';
     // Thinking always has a limit (a small model otherwise argues with itself for minutes): medium → 8 lines,
@@ -806,6 +806,7 @@ After the last file: at most 3 short lines (how to run).)` }];
     const hybrid = !/-code(:|$)/.test(String(model));
     msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${meant}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${meant}${overview}${ref}`))];
     thinkMax = level === 'project' ? 8192 : think ? 2000 : 600;
+    thinkOff = hybrid && !think;
   }
   // Verified Learn answers become training data (your own model's work; <think> and hidden docs/analysis are never saved)
   const saveTextLesson = (answer) => {
@@ -948,6 +949,7 @@ After the last file: at most 3 short lines (how to run).)` }];
   if (maxTokens) body.max_tokens = Number(maxTokens);
   // A whole project, or a "Fix with AI" reply with several full files, needs room
   if (projectMode || /live preview of the project shows these errors/i.test(lastText)) body.max_tokens = Math.max(Number(maxTokens) || 0, 8192);
+  if (thinkOff) body.reasoning_effort = 'none'; // simple questions: no thinking at all (fast)
   if (thinkMax && !maxTokens) body.max_tokens = Math.max(body.max_tokens || 0, thinkMax); // think-level budget (Learn)
   if (provider === 'anthropic' && !body.max_tokens) body.max_tokens = 8192;
   // Ask for exact token counts where the provider supports it (others are estimated)
