@@ -27,6 +27,16 @@ export async function extractText(name, base64) {
     const pdf = require('pdf-parse/lib/pdf-parse.js');
     return (await pdf(buf)).text;
   }
+  if (ext === '.xlsx') { // every sheet as a text table (comma-separated, first row = headers)
+    const xl = require('read-excel-file/node');
+    const out = [];
+    for (const sheet of await xl.readSheetNames(buf)) {
+      const rows = await xl.default(buf, { sheet });
+      const cell = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+      out.push(`Sheet: ${sheet} (${Math.max(0, rows.length - 1)} rows)\n${rows.map((r) => r.map(cell).join(',')).join('\n')}`);
+    }
+    return out.join('\n\n');
+  }
   if (ext === '.docx') {
     const mammoth = require('mammoth');
     return (await mammoth.extractRawText({ buffer: buf })).value;

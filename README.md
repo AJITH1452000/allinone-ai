@@ -37,9 +37,9 @@ React + Vite + MUI frontend, Node/Express backend.
 ### Evaluate a model
 ```bash
 npm run dev                                   # keep the app running
-npm run eval -- learn-pro                     # all tests
-npm run eval -- learn-max --mode expert       # Expert reasoning mode
-npm run eval -- learn-code --only programming,tool_usage
+npm run eval -- learn                         # all tests
+npm run eval -- learn --mode expert           # Expert reasoning mode
+npm run eval -- learn-codeplus --only programming,tool_usage
 ```
 Results are saved in `eval/results/`. Run it again after changing `models/system.md` or a Modelfile — it shows which tests got better or broke.
 

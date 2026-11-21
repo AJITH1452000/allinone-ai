@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { Box, Paper, IconButton, Tooltip, TextField, Button, ButtonBase, Collapse, Typography, Chip, useTheme, alpha } from '@mui/material';
+import { Box, Paper, IconButton, Tooltip, TextField, Button, ButtonBase, Collapse, Typography, Chip, Menu, MenuItem, useTheme, alpha } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { downloadZip } from '../lib/zip';
 import { mergeFiles, repairProject } from '../lib/project';
@@ -113,14 +113,42 @@ function BuildSteps({ steps }) {
 
 function VerifyBadge({ v }) {
   const [open, setOpen] = useState(false);
-  if (!v || v.status === 'skipped') return null;
-  if (v.status === 'checking') return <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.5 }}>🔎 Expert mode: double-checking the answer…</Typography>;
-  if (v.status === 'ok') return <Chip size="small" label={`✓ ${v.label || 'Self-checked — no errors found'}`} sx={{ mt: 0.5, height: 24, fontSize: 12, color: 'success.main', bgcolor: (t) => alpha(t.palette.success.main, 0.1) }} />;
+  // Like Claude / ChatGPT: checks run silently — nothing is shown when all is well; only real problems get a note
+  if (!v || v.status !== 'issues') return null;
   return (
     <Box sx={{ mt: 1, p: 1.25, borderRadius: '10px', border: 1, borderColor: (t) => alpha(t.palette.warning.main, 0.5), bgcolor: (t) => alpha(t.palette.warning.main, 0.08) }}>
-      <Typography onClick={() => setOpen((x) => !x)} sx={{ fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>⚠️ Self-check found possible mistakes {open ? '▴' : '▾'}</Typography>
-      <Collapse in={open}><Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap', mt: 0.75 }}>{v.text}</Typography></Collapse>
+      <Typography onClick={() => setOpen((x) => !x)} sx={{ fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>⚠️ Possible problems in this answer {open ? '▴' : '▾'}</Typography>
+      <Collapse in={open}><Typography sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap', mt: 0.75 }}>
+        {/* **bold** in the check's text → real bold (no raw stars) */}
+        {String(v.text || '').split(/(\*\*[^*]+\*\*)/g).map((part, i) => (/^\*\*[^*]+\*\*$/.test(part) ? <b key={i}>{part.slice(2, -2)}</b> : part))}
+      </Typography></Collapse>
     </Box>
+  );
+}
+
+// Export one answer: Markdown, Word (.docx) or PDF (print → Save as PDF). Loaded on click, so the app stays small.
+function ExportBtn({ text, model }) {
+  const [anchor, setAnchor] = useState(null);
+  // Document title: the answer's first heading, else its first few words
+  const title = (text.match(/^\s*#{1,3}\s+(.+)$/m)?.[1] || text.replace(/[#*`>[\]]/g, '').trim().split(/\s+/).slice(0, 6).join(' ')).slice(0, 60);
+  const go = async (kind) => {
+    setAnchor(null);
+    const { exportAllowed } = await import('../lib/api');
+    if (!(await exportAllowed(`answer-${kind}`))) return; // office mode: needs the "export" permission (shows "Ask the owner")
+    const x = await import('../lib/exportDoc');
+    if (kind === 'md') x.exportAnswerMarkdown(text, title);
+    else if (kind === 'docx') x.exportAnswerDocx(text, title);
+    else x.exportAnswerPdf(text, title, model);
+  };
+  return (
+    <>
+      <Tooltip title="Export"><IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)}><DownloadIcon fontSize="inherit" /></IconButton></Tooltip>
+      <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)} slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 170 } } }}>
+        <MenuItem onClick={() => go('md')} sx={{ fontSize: 14 }}>Markdown (.md)</MenuItem>
+        <MenuItem onClick={() => go('docx')} sx={{ fontSize: 14 }}>Word (.docx)</MenuItem>
+        <MenuItem onClick={() => go('pdf')} sx={{ fontSize: 14 }}>PDF</MenuItem>
+      </Menu>
+    </>
   );
 }
 
@@ -287,6 +315,10 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.content);
   const [showThink, setShowThink] = useState(false);
+  // Feedback that trains Learn: 👎 → "What was wrong?", ✏️ → correct the answer yourself (saved as your best training data)
+  const [fb, setFb] = useState(null); // null | 'bad' | 'edit'
+  const [fbText, setFbText] = useState('');
+  const isLearn = m.model?.provider === 'ollama';
 
   if (m.role === 'user') {
     return (
@@ -405,8 +437,10 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
           <Box className="act" sx={{ display: 'flex', alignItems: 'center', gap: 0.25, opacity: isLast ? 1 : 0, transition: '.2s' }}>
             <CopyBtn text={m.content} />
             <SpeakBtn text={m.content} />
+            <ExportBtn text={m.content} model={m.model} />
             <Tooltip title="Good response"><IconButton size="small" onClick={() => onFeedback?.('up')} sx={{ color: m.feedback === 'up' ? 'success.main' : undefined }}>{m.feedback === 'up' ? <ThumbUpIcon fontSize="inherit" /> : <ThumbUpOutlinedIcon fontSize="inherit" />}</IconButton></Tooltip>
-            <Tooltip title="Bad response"><IconButton size="small" onClick={() => onFeedback?.('down')} sx={{ color: m.feedback === 'down' ? 'error.main' : undefined }}>{m.feedback === 'down' ? <ThumbDownIcon fontSize="inherit" /> : <ThumbDownOutlinedIcon fontSize="inherit" />}</IconButton></Tooltip>
+            <Tooltip title="Bad response"><IconButton size="small" onClick={() => { if (m.feedback === 'down') return onFeedback?.('down'); if (isLearn) { setFbText(''); setFb('bad'); } else onFeedback?.('down'); }} sx={{ color: m.feedback === 'down' ? 'error.main' : undefined }}>{m.feedback === 'down' ? <ThumbDownIcon fontSize="inherit" /> : <ThumbDownOutlinedIcon fontSize="inherit" />}</IconButton></Tooltip>
+            {isLearn && <Tooltip title="Correct it (teaches Learn)"><IconButton size="small" onClick={() => { setFbText(m.correction || m.content); setFb('edit'); }} sx={{ color: m.feedback === 'corrected' ? 'primary.main' : undefined }}><EditOutlinedIcon fontSize="inherit" /></IconButton></Tooltip>}
             {isLast && <Tooltip title="Regenerate"><IconButton size="small" onClick={onRegenerate}><RefreshIcon fontSize="inherit" /></IconButton></Tooltip>}
             {m.model && (
               <Tooltip title="Tokens sent to the model (input) and received (output). Lower input = cheaper & faster.">
@@ -416,10 +450,26 @@ function Message({ m, isLast, streaming, onEdit, onRegenerate, onPreview, fontSi
                     ? ` · ${m.usage.prompt_tokens} in · ${m.usage.completion_tokens} out`
                     : m.sent ? ` · ~${m.sent} in · ~${Math.ceil(m.content.length / 4)} out` : ''}
                   {m.cost && (m.cost.free ? ' · free' : m.cost.cost != null ? ` · $${m.cost.cost < 0.01 ? m.cost.cost.toFixed(4) : m.cost.cost.toFixed(2)}` : '')}
+                  {m.speed && (m.speed.cached ? ' · ⚡ cached' : ` · ${m.speed.ttft} s${m.speed.tps ? ` · ${m.speed.tps} tok/s` : ''}`)}
                 </Typography>
               </Tooltip>
             )}
           </Box>
+        )}
+        {fb && (
+          <Paper variant="outlined" sx={{ mt: 1, p: 1.5, borderRadius: '12px' }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 1 }}>{fb === 'bad' ? 'What was wrong? (optional)' : '✏️ Correct the answer — your version becomes training data for Learn'}</Typography>
+            <TextField fullWidth multiline autoFocus minRows={fb === 'bad' ? 2 : 12} maxRows={fb === 'bad' ? 6 : 30} value={fbText} onChange={(e) => setFbText(e.target.value)}
+              placeholder={fb === 'bad' ? 'e.g. the import is wrong, it used a prop MUI does not have…' : ''}
+              InputProps={{ sx: { fontFamily: fb === 'edit' ? 'ui-monospace, Consolas, monospace' : undefined, fontSize: 13 } }} />
+            <Box sx={{ display: 'flex', gap: 1, mt: 1, justifyContent: 'flex-end' }}>
+              <Button size="small" color="inherit" onClick={() => setFb(null)}>Cancel</Button>
+              <Button size="small" variant="contained" disableElevation disabled={fb === 'edit' && (!fbText.trim() || fbText === m.content)}
+                onClick={() => { onFeedback?.(fb === 'bad' ? 'down' : 'corrected', fb === 'bad' ? { note: fbText } : { corrected: fbText }); setFb(null); }}>
+                {fb === 'bad' ? 'Send' : 'Save correction'}
+              </Button>
+            </Box>
+          </Paper>
         )}
       </Box>
     </Box>

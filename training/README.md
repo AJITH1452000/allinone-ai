@@ -1,55 +1,51 @@
-# Train Learn Code+ (your own fine-tuned coder)
+# Training Learn (free, on Kaggle)
 
-Fine-tunes **Qwen2.5-Coder-7B** (the base of Learn Code) on licence-checked coding data, on a **free Kaggle GPU**,
-then brings it back into Evolvix as **Learn Code+**. Your laptop's 4 GB GPU can't train a 7B model; Kaggle's T4 (16 GB) can.
+Learn improves by training only on legal data: its own verified answers, your 👍 / ✏️, your own code, and permissively licensed open-source code (MIT, Apache-2.0, BSD, ISC). It never trains on answers from Claude, GPT, Gemini or any other online AI.
 
-## 1 · One-time setup
-1. Make a free account at **kaggle.com** and verify your phone number (needed for GPU + internet).
-2. Pick where trained models are archived (your external disk when you have it):
+## Once
+
+```bash
+npm run add-my-code -- "E:\my-project"   # your own code → Learn's style
+npm run fetch-open-code                  # MUI / Recharts / Vite examples (licences checked)
+npm run get-datasets                     # commitpackft bug-fix commits + MUI + Recharts
+npm run load-docs                        # React / MUI / Vite / Recharts docs for code answers
+```
+
+## Every day
+
+Use Evolvix normally and press 👍 / 👎 / ✏️ under Learn's answers. Your corrections count twice.
+
+## At night
+
+```bash
+npm run dev          # keep the app running
+npm run self-train   # Learn practises; only verified answers are kept (resumable)
+```
+
+## Weekly
+
+```bash
+npm run clean-data      # → data/training/train.jsonl + train-pairs.jsonl
+npm run make-notebook   # → training/kaggle/learn_selftrain.ipynb
+```
+
+1. On Kaggle, upload `train.jsonl` and `train-pairs.jsonl` as a new dataset.
+2. Import the notebook, add that dataset as input, and set the accelerator to **GPU T4 x2**.
+3. Press **Run all**, then download `learn-codeplus.Q4_K_M.gguf` from the Output tab.
+4. Back on your PC:
+
    ```bash
-   npm run storage -- E:        # → E:\EvolvixAI\{datasets,checkpoints,models,eval,my-data}
+   npm run import-model -- "C:\Downloads\learn-codeplus.Q4_K_M.gguf"
    ```
-   Until then it uses `D:\EvolvixAI`.
 
-## 2 · (Optional) add your own examples
-In the app, rate good answers from Learn models with 👍, then **Settings → Data → Export training data**.
-On Kaggle: **Datasets → New Dataset** → upload the `evolvix-training-….jsonl` file.
+   This runs the exam automatically. Learn Code+ becomes your default model only if it scores higher than Learn.
 
-## 3 · Train on Kaggle (~4–6 h, mostly waiting)
-1. `npm run make-notebook` → creates `training/kaggle/evolvix_coder.ipynb`.
-2. kaggle.com → **Create → New Notebook → File → Import Notebook** → choose that file.
-3. Right panel: **Accelerator → GPU T4 x2**, **Internet → On**. *(Optional: **Add Input** → your dataset from step 2.)*
-4. **Save Version → Save & Run All (Commit)**. This runs in the background, even if you close the browser.
-5. When it's done, open the version → **Output** → download `learn-codeplus/gguf/…Q4_K_M.gguf` (~4.7 GB).
-   The output also shows the **coding test score** (unseen problems checked by their real unit tests).
+## Files
 
-If a session is cut off: the version's output keeps the `checkpoints/` folder — start a new version with that output
-added as input and training continues from the last checkpoint.
-
-## 4 · Bring it home
-```bash
-npm run import-model -- "C:\Users\you\Downloads\unsloth.Q4_K_M.gguf"
-```
-Copies the file to your storage disk, builds **learn-codeplus** in Ollama, and it appears in the model picker as **Learn Code+**.
-
-## 5 · Prove it's better
-```bash
-npm run eval -- learn-code     --only programming,tool_usage,instruction_following
-npm run eval -- learn-codeplus --only programming,tool_usage,instruction_following
-```
-Keep Learn Code+ only if it scores higher.
-
-## What it trains on (`config.json`)
-| Source | Licence | Made by | Used |
-|---|---|---|---|
-| bigcode/self-oss-instruct-sc2-exec-filter-50k | ODC-By | StarCoder2 (open) | ✅ |
-| nvidia/OpenCodeInstruct (only solutions that pass 100 % of their unit tests) | CC-BY-4.0 | Qwen2.5 (open) | ✅ |
-| openai/gsm8k (maths reasoning) | MIT | humans | ✅ |
-| Magicoder-Evol / Magicoder-OSS / CodeFeedback | MIT / Apache-2.0 | GPT-3.5 / GPT-4 | ⏭ off — set `"use_only_clean_sources": false` to include (OpenAI's terms then apply) |
-
-Pipeline: licence check against an allow-list → remove empty / placeholder / over-long answers → Python code must parse →
-exact + near-duplicate removal → sort into your 10 categories (20 % generation, 15 % debugging …) → 96 / 2 / 2 split →
-QLoRA (rank 16, all attention + MLP layers) → unseen-problem unit-test score → GGUF Q4_K_M export.
-
-**Size:** ~24 000 examples (≈ 50 MB of text). For fine-tuning, quality beats quantity — 200 GB is pre-training scale
-(training a model from scratch on hundreds of GPUs). Raise `total_examples` in `config.json` if a session has time left.
+| File | What it is |
+|---|---|
+| `kaggle/learn_selftrain.py` | The training code. It runs on Kaggle (Python is installed there); you don't need Python on your PC. |
+| `config.json` | Training settings: base model, LoRA, epochs, DPO |
+| `tasks.json` | Practice tasks for self-train. The 40 exam tasks in `eval/mywork` are never used for training. |
+| `sources.json` | Open-source repositories to learn from (each one's licence is checked) |
+| `old/` | The earlier public-dataset notebook (archived) |

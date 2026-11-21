@@ -57,6 +57,12 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
       if (f.type.startsWith('image/')) {
         const url = await shrinkImage(await readAsDataURL(f));
         setImages((v) => [...v, url]);
+      } else if (/\.(pdf|docx|xlsx)$/i.test(f.name)) { // binary documents: the server extracts the text
+        const data = String(await readAsDataURL(f)).split(',')[1];
+        const r = await fetch('/api/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, data }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.text) setFiles((v) => [...v, { name: f.name, text: j.text.slice(0, MAX_TEXT) }]);
+        else alert(`${f.name}: ${j.error || 'could not read this file'}`);
       } else {
         const t = await readAsText(f);
         setFiles((v) => [...v, { name: f.name, text: t.slice(0, MAX_TEXT) }]);
@@ -129,10 +135,25 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
         minRows={2} InputProps={{ disableUnderline: true, sx: { fontSize: 15.5, px: 0.75, py: 0.75, lineHeight: 1.5 } }} />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
         <input ref={fileRef} type="file" multiple hidden
-          accept="image/*,.txt,.md,.js,.jsx,.ts,.tsx,.json,.css,.html,.py,.java,.c,.cpp,.csv,.xml,.yml,.yaml,.sql,.env,.log"
+          accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.js,.jsx,.ts,.tsx,.json,.css,.html,.py,.java,.c,.cpp,.csv,.xml,.yml,.yaml,.sql,.env,.log"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         {/* + menu (like Claude): files, web search, style */}
         <Tooltip title="Add files, web search & more"><IconButton size="small" onClick={(e) => setPlusMenu(e.currentTarget)} sx={{ border: 1, borderColor: 'divider' }}><AddIcon fontSize="small" /></IconButton></Tooltip>
+        {settings.extendedThinking && (
+          <Chip size="small" label="🧠 Extended thinking" color="secondary" onDelete={() => setSettings({ ...settings, extendedThinking: false })}
+            sx={{ borderRadius: '8px', fontSize: 12.5 }} />
+        )}
+        <Chip size="small" label={settings.quality === 'max' ? '🧠 Max quality' : '⚡ Fast'} variant={settings.quality === 'max' ? 'filled' : 'outlined'}
+          color={settings.quality === 'max' ? 'secondary' : 'default'} onClick={() => setSettings({ ...settings, quality: settings.quality === 'max' ? 'fast' : 'max' })}
+          sx={{ borderRadius: '8px', fontSize: 12.5 }} />
+        {settings.research && (
+          <Chip size="small" label="🔎 Research" color="primary" onDelete={() => setSettings({ ...settings, research: false })}
+            sx={{ borderRadius: '8px', fontSize: 12.5 }} />
+        )}
+        {!!settings.style && settings.style !== 'normal' && (
+          <Chip size="small" label={`Style: ${settings.style}`} onDelete={() => setSettings({ ...settings, style: 'normal' })}
+            sx={{ borderRadius: '8px', fontSize: 12.5 }} />
+        )}
         {settings.webSearch === 'on' && (
           <Chip size="small" icon={<LanguageIcon sx={{ fontSize: '15px !important' }} />} label="Search" color="primary" onDelete={() => setSettings({ ...settings, webSearch: 'auto' })}
             sx={{ borderRadius: '8px', fontSize: 12.5 }} />
@@ -194,6 +215,21 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
           <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>Run code</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>AI may run JavaScript in a locked sandbox</Typography></Box>
           <Switch size="small" checked={!!settings.allowCode} />
         </MenuItem>
+        <MenuItem onClick={() => setSettings({ ...settings, research: !settings.research })} sx={{ borderRadius: '8px', mx: 0.75 }}>
+          <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>🔎 Research</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>3–5 searches → a report with sources</Typography></Box>
+          <Switch size="small" checked={!!settings.research} />
+        </MenuItem>
+        <MenuItem onClick={() => setSettings({ ...settings, extendedThinking: !settings.extendedThinking })} sx={{ borderRadius: '8px', mx: 0.75 }}>
+          <Box sx={{ flex: 1 }}><Typography sx={{ fontSize: 14 }}>🧠 Extended thinking</Typography><Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>Learn thinks before every answer (slower)</Typography></Box>
+          <Switch size="small" checked={!!settings.extendedThinking} />
+        </MenuItem>
+        <Typography variant="caption" color="text.secondary" sx={{ px: 2, fontWeight: 600 }}>Style</Typography>
+        <Box sx={{ display: 'flex', gap: 0.5, px: 1.5, py: 0.75, flexWrap: 'wrap' }}>
+          {['normal', 'concise', 'explanatory', 'formal'].map((st) => (
+            <Chip key={st} size="small" label={st[0].toUpperCase() + st.slice(1)} color={(settings.style || 'normal') === st ? 'primary' : 'default'}
+              variant={(settings.style || 'normal') === st ? 'filled' : 'outlined'} onClick={() => setSettings({ ...settings, style: st })} />
+          ))}
+        </Box>
       </Menu>
 
       <Menu anchorEl={modeMenu} open={!!modeMenu} onClose={() => setModeMenu(null)}

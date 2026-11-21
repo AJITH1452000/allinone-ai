@@ -1,0 +1,56 @@
+{
+ "react-18.3.1.development.js": {
+  "url": "https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.development.js",
+  "sha256": "28348fef6cb0ed8b2ceeb22deaf824428fd13875d84c73d38f77dd216fc24e7f",
+  "bytes": 109931,
+  "at": "2026-11-21T18:09:03.648Z"
+ },
+ "react-dom-18.3.1.development.js": {
+  "url": "https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.development.js",
+  "sha256": "f9044a5e9c39db8bb1a204dff924e526ec0a621e695bb69de1035811be8709e4",
+  "bytes": 1080227,
+  "at": "2026-11-21T18:09:04.226Z"
+ },
+ "material-ui-5.16.7.production.min.js": {
+  "url": "https://unpkg.com/@mui/material@5.16.7/umd/material-ui.production.min.js",
+  "sha256": "566256f78fd9f0fb3bf1b3169c7f50b7371a3d5847133791bc68000e60fba77c",
+  "bytes": 566623,
+  "at": "2026-11-21T18:09:05.461Z"
+ },
+ "prop-types-15.8.1.min.js": {
+  "url": "https://unpkg.com/prop-types@15.8.1/prop-types.min.js",
+  "sha256": "e653471aba824786aee5dce1bcb5a86ed30c8518d346d2ace0460a5633a9cbdb",
+  "bytes": 1722,
+  "at": "2026-11-21T18:09:05.530Z"
+ },
+ "recharts-2.12.7.js": {
+  "url": "https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.js",
+  "sha256": "d9aa8577cf67317ed7d27f10f5ce88d56e4bfc15d37ba5ba62f8dedf24edae4d",
+  "bytes": 498814,
+  "at": "2026-11-21T18:09:05.716Z"
+ },
+ "lucide-react-0.263.1.min.js": {
+  "url": "https://cdn.jsdelivr.net/npm/lucide-react@0.263.1/dist/umd/lucide-react.min.js",
+  "sha256": "38de5f472b56d1ca1590b0621c34deee4dc1cf980dcb93f40e0a1a79c5564dbd",
+  "bytes": 313217,
+  "at": "2026-11-21T18:09:06.485Z"
+ },
+ "babel-standalone-7.24.7.min.js": {
+  "url": "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js",
+  "sha256": "d9e33722fdfba37e4e428aa72cb58da65f18358bfb229e136dfc1285e76b03ff",
+  "bytes": 2866178,
+  "at": "2026-11-21T18:09:07.460Z"
+ },
+ "mermaid-10.9.1.min.js": {
+  "url": "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js",
+  "sha256": "61b335a46df05a7ce1c98378f60e5f3e77a7fb608a1056997e8a649304a936d6",
+  "bytes": 3335717,
+  "at": "2026-11-21T18:09:08.763Z"
+ },
+ "tailwind-play-3.4.5.js": {
+  "url": "https://cdn.tailwindcss.com/3.4.5",
+  "sha256": "6cdb72b843779c37d7b3c45d22ece8989cfad2b929dbe590bcffd84c634de9b0",
+  "bytes": 411514,
+  "at": "2026-11-21T18:09:11.077Z"
+ }
+}

@@ -56,8 +56,15 @@ export function needsSearch(q = '') {
   const s = q.trim();
   if (s.length < 2 || GREETING.test(s) || MATH.test(s) || SMALLTALK.test(s) || TANGLISH_TALK.test(s)) return false;
   if (s.includes('```') || s.length > 1500) return false; // pasted code / long documents
+  // Asking for code / an example / syntax is never a web-search job ("give code", "example venum", "code kudu")
+  if (/\b(code|codes|coding|snippet|syntax|example|examples|program|sample|implementation|implement|package|packages|library|libraries|npm|pip|module|plugin|dependency|sdk)\b/i.test(s)
+    && !/\b(search|google|look ?up|latest|news|release[sd]?|version)\b/i.test(s)) return false;
   if (TASK.test(s) || CREATIVE.test(s)) return false;
-  if (BUILD_THING.test(s) && BUILD_VERB.test(s) && !FRESH.test(s)) return false; // "i need a portfolio website", "portfolio website build pannu"
+  // Building / editing a page, site or app is never a web-search job — even when a SECTION is called "latest news" —
+  // unless the user explicitly asks to search. (Search results inside a build answer turn into fake links and sections.)
+  const askedToSearch = /\b(search|google|look ?up|browse|find online|from the internet)\b/i.test(s);
+  if (BUILD_THING.test(s) && !askedToSearch && !/^\s*(what|which|who|when|is|are|does|did)\b/i.test(s)
+    && (BUILD_VERB.test(s) || CODING.test(s) || /\b(page|section|sections|with|add|pannu|venum)\b/i.test(s))) return false;
   if (CODING.test(s) && !FRESH.test(s)) return false;
   // Short chit-chat directed at the assistant ("how was your day", "do you like music") → no search
   if (ABOUT_BOT.test(s) && !FRESH.test(s) && !NAMED.test(s.replace(/^\w/, '')) && s.split(/\s+/).length <= 8) return false;

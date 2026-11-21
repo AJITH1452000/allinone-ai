@@ -1,0 +1,13 @@
+{
+  "_note": "Open-source code Learn learns from (npm run fetch-open-code). Add your own entries; each repo's LICENSE is checked and anything not MIT / Apache-2.0 / BSD / ISC is skipped. out = which data/training file the samples go to; fixes = also mine bug-fix commits (needs 300 commits of history).",
+  "sources": [
+    { "repo": "mui/material-ui", "branch": "v5.x", "paths": ["docs/data/material/getting-started/templates", "docs/data/material/components"],
+      "exts": "\\.(js|jsx|tsx)$", "skip": "\\.preview$|/pages/|\\.d\\.ts$|\\.test\\.", "out": "mui.jsonl", "source": "mui", "fixes": false },
+    { "repo": "recharts/recharts", "paths": ["demo", "storybook"], "exts": "\\.(jsx|tsx)$", "skip": "\\.test\\.|\\.spec\\.|\\.d\\.ts$", "out": "recharts.jsonl", "source": "recharts", "fixes": true },
+    { "repo": "vitejs/vite", "paths": ["packages/create-vite/template-react", "packages/create-vite/template-react-ts"], "exts": "\\.(jsx|tsx|js|css)$", "out": "opencode.jsonl", "source": "vite", "fixes": false },
+    { "repo": "devias-io/material-kit-react", "paths": ["src"], "exts": "\\.(jsx|tsx)$", "out": "opencode.jsonl", "source": "open-code", "fixes": true },
+    { "repo": "minimal-ui-kit/material-kit-react", "paths": ["src"], "exts": "\\.(jsx|tsx)$", "out": "opencode.jsonl", "source": "open-code", "fixes": true },
+    { "repo": "creativetimofficial/material-dashboard-react", "paths": ["src"], "exts": "\\.(jsx|js)$", "out": "opencode.jsonl", "source": "open-code", "fixes": true },
+    { "repo": "marmelab/react-admin", "paths": ["examples/simple/src", "examples/demo/src"], "exts": "\\.(jsx|tsx)$", "out": "opencode.jsonl", "source": "open-code", "fixes": false }
+  ]
+}

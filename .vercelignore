@@ -13,3 +13,5 @@ eval/results/
 .vercel/
 *.log
 claude-local.cmd
+backups/
+public/vendor/manifest.json.bak

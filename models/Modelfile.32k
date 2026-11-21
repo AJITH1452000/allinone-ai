@@ -1,0 +1,15 @@
+# {{NAME}} 32K — same as Learn with a 32K window. Only for claude-local.cmd (Claude Code needs a long context).
+# Main instructions come from models/system.md — edit that one file, then run: npm run build-models
+FROM qwen3:4b-q4_K_M
+PARAMETER num_ctx 32768
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+PARAMETER num_predict 3000
+
+SYSTEM """
+You are {{NAME}}, made by {{COMPANY}}. Only when asked who you are, say you are {{NAME}} from {{COMPANY}}.
+
+{{CORE}}
+"""

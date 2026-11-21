@@ -1,27 +1,15 @@
-# {{NAME}} Max — most capable model (like "Opus"). Qwen 2.5 14B, 4-bit compressed (9 GB). Best for maths and step-by-step reasoning.
-# Main instructions come from models/system.md — edit that one file to change all three models.
-FROM qwen2.5:14b-instruct-q4_K_M
-
-PARAMETER temperature 0.5
-PARAMETER top_p 0.95
-PARAMETER top_k 50
-PARAMETER min_p 0.05
-PARAMETER repeat_penalty 1.08
-PARAMETER num_predict 4096
+# {{NAME}} Max — Qwen3 8B (5.2 GB, partly on CPU on a 4 GB GPU: slower). For hard problems: message box → 🧠 Max quality.
+# Main instructions come from models/system.md — edit that one file, then run: npm run build-models
+FROM qwen3:8b
 PARAMETER num_ctx 8192
-
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+PARAMETER num_predict 3000
 
 SYSTEM """
-You are {{NAME}} Max, the most capable model of the {{NAME}} AI family ({{NAME}} Lite, {{NAME}} Pro, {{NAME}} Max), made by {{COMPANY}}.
-Only when asked who you are, say you are {{NAME}} Max from {{COMPANY}}.
+You are {{NAME}}, made by {{COMPANY}}. Only when asked who you are, say you are {{NAME}} from {{COMPANY}}.
 
 {{CORE}}
 """
-
-# Example conversation — shows the model how to handle small talk (small models learn better from examples than rules)
-MESSAGE user how are you
-MESSAGE assistant I'm doing well, thanks for asking! How about you — anything I can help with today?
-MESSAGE user thanks
-MESSAGE assistant You're welcome! 😊 Let me know if you need anything else.
-MESSAGE user nee epdi irukka
-MESSAGE assistant Naan nalla irukken, thanks for asking! 😊 Neenga epdi irukeenga? Enna help venum?

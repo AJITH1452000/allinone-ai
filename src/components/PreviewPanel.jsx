@@ -3,6 +3,7 @@ import { Box, Button, IconButton, Typography, Tooltip, alpha } from '@mui/materi
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { localizeDoc } from '../lib/vendor';
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -207,12 +208,19 @@ export function buildDoc({ code, lang, files }) {
 export default function PreviewPanel({ preview, onClose, onFix }) {
   const frameRef = useRef(null);
   const [errors, setErrors] = useState([]);
-  const doc = useMemo(() => (preview ? buildDoc(preview) : ''), [preview]);
+  // Office mode: CDN files come from /vendor (local) and the preview runs in /preview-frame — a sandboxed page with its own
+  // strict CSP and an opaque origin (no access to the app's cookies or API). The document is posted into it.
+  const office = !!window.__EVX_OFFICE;
+  const doc = useMemo(() => (preview ? (office ? localizeDoc(buildDoc(preview)) : buildDoc(preview)) : ''), [preview, office]);
+  const docRef = useRef(doc);
+  docRef.current = doc;
   useEffect(() => { setErrors([]); }, [doc]);
   // Errors reported by the preview (only from our own iframe), real ones only — notes about placeholders are not errors
   useEffect(() => {
     const onMsg = (e) => {
-      if (e.source !== frameRef.current?.contentWindow || !e.data?.evxPreviewError) return;
+      if (e.source !== frameRef.current?.contentWindow) return;
+      if (e.data?.evxFrameReady) { frameRef.current.contentWindow.postMessage({ type: 'evx-doc', html: docRef.current }, '*'); return; }
+      if (!e.data?.evxPreviewError) return;
       const m = e.data.evxPreviewError;
       if (/^Note:/.test(m)) return;
       setErrors((list) => (list.includes(m) ? list : [...list, m].slice(0, 8)));
@@ -222,6 +230,8 @@ export default function PreviewPanel({ preview, onClose, onFix }) {
   }, []);
   if (!preview) return null;
   const openTab = () => {
+    // Office mode: a blob: page would run the generated code with the APP's origin (it could call the API) → not allowed
+    if (office) return alert('In office mode the preview only runs inside its sandbox. Download the project (ZIP) to run it locally.');
     const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }));
     window.open(url, '_blank');
   };
@@ -243,7 +253,7 @@ export default function PreviewPanel({ preview, onClose, onFix }) {
             onClick={() => onFix(errors.join('\n'), preview.lang === 'project')}>Fix with AI</Button>
         </Box>
       )}
-      <Box component="iframe" ref={frameRef} key={doc.length + preview.lang} title="preview" srcDoc={doc}
+      <Box component="iframe" ref={frameRef} key={doc.length + preview.lang} title="preview" {...(office ? { src: '/preview-frame' } : { srcDoc: doc })}
         sandbox="allow-scripts allow-forms allow-modals allow-popups"
         sx={{ flex: 1, border: 0, bgcolor: '#fff' }} />
     </Box>

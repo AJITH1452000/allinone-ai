@@ -25,17 +25,32 @@ export const DEFAULT_SETTINGS = {
   reasoning: 'balanced', // fast / balanced / expert
   tools: 'auto',     // auto = calculator, date, memory… when the message needs them; off = never
   allowCode: false,  // let the AI run JavaScript in a sandbox (you turn this on)
+  extendedThinking: false, // message box → 🧠 Extended thinking: Learn thinks before every answer
+  style: 'normal',  // normal / concise / explanatory / formal
+  research: false,  // message box → 🔎 Research
+  quality: 'fast',  // message box → ⚡ Fast (learn) / 🧠 Max quality (learn-max)
   memoryOn: true,    // long-term memory of facts you ask the AI to remember
   memories: [],      // [{ id, text, at }]
   autoSpeak: false,  // read every reply aloud
-  bigJobs: 'auto',   // full projects use a connected free online model (Gemini / Groq / OpenRouter) instead of the local one
   v: 2,
 };
 
+// Office mode: chats, settings and projects live in YOUR folder on the server (data/users/<you>/, encrypted), not in this
+// browser — OfficeGate preloads them into window.__EVX_DOCS before the app starts; writes are sent back (debounced).
+const OFFICE_DOC = { 'aio-chats': 'chats', 'aio-settings': 'settings', 'aio-projects': 'projects' };
+const pending = {};
 const read = (k, fb) => {
+  if (window.__EVX_OFFICE && OFFICE_DOC[k]) { const v = window.__EVX_DOCS?.[OFFICE_DOC[k]]; return v ?? fb; }
   try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fb; } catch { return fb; }
 };
 const write = (k, v) => {
+  if (window.__EVX_OFFICE && OFFICE_DOC[k]) {
+    const name = OFFICE_DOC[k];
+    (window.__EVX_DOCS ||= {})[name] = v;
+    clearTimeout(pending[name]);
+    pending[name] = setTimeout(() => fetch(`/api/office/doc/${name}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: v }) }).catch(() => {}), 800);
+    return true;
+  }
   try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; }
 };
 

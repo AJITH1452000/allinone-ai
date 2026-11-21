@@ -47,7 +47,7 @@ export async function kbUpload(id, file) {
   } else if (TEXT_EXT.test(file.name) || file.type.startsWith('text/')) {
     body = { name: file.name, text: await file.text() };
   } else {
-    throw new Error(`${file.name}: unsupported type (use PDF, Word .docx, txt, md, csv, json, html or code files)`);
+    throw new Error(`${file.name}: unsupported type (use PDF, Word .docx, Excel .xlsx, txt, md, csv, json, html or code files)`);
   }
   if (JSON.stringify(body).length > 24e6) throw new Error(`${file.name}: too large (max ~18 MB)`);
   const r = await fetch(`/api/kb/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -59,13 +59,19 @@ export const kbAddText = (id, name, text) => fetch(`/api/kb/${id}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, text }),
 }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
 
-export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, onNote, onTool, onMemory, onVerify, onStep, signal }) {
+export async function streamChat(payload, { onText, onReasoning, onError, onUsage, onSources, onCost, onSearch, onNote, onTool, onMemory, onVerify, onStep, onSpeed, signal }) {
   const r = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal,
   });
+  // A refusal (office mode: no permission, rate limit, not logged in) comes back as plain JSON, not a stream
+  if (!r.ok && (r.headers.get('content-type') || '').includes('application/json')) {
+    const j = await r.json().catch(() => ({}));
+    onError?.(j.error || `Request failed (${r.status})`);
+    return;
+  }
   const reader = r.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
@@ -92,6 +98,7 @@ export async function streamChat(payload, { onText, onReasoning, onError, onUsag
         else if (ev.t === 'memory') onMemory?.(ev.v);
         else if (ev.t === 'verify') onVerify?.(ev.v);
         else if (ev.t === 'step') onStep?.(ev.v);
+        else if (ev.t === 'speed') onSpeed?.(ev.v);
       } catch {}
     }
   }
@@ -152,13 +159,10 @@ export const toApiMessages = (messages, { memory = 10 } = {}) => {
   });
 };
 
-export const exportMarkdown = (chat) => {
-  const md = `# ${chat.title}\n\n` + chat.messages
-    .map((m) => `### ${m.role === 'user' ? '🧑 You' : `🤖 ${m.model?.id || 'AI'}`}\n\n${m.content}\n`)
-    .join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
-  a.download = `${chat.title.replace(/[^\w\s-]/g, '').slice(0, 40) || 'chat'}.md`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
+
+/** Office mode: exports need the "export" permission and are recorded in the audit log. Elsewhere always allowed. */
+export async function exportAllowed(kind) {
+  if (!window.__EVX_OFFICE) return true;
+  const r = await fetch('/api/office/export-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }) }).catch(() => null);
+  return !!r?.ok;
+}

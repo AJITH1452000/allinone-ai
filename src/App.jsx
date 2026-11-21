@@ -32,7 +32,7 @@ import IosShareIcon from '@mui/icons-material/IosShare';
 import { SearchDialog, ProjectsDialog, ArtifactsDialog } from './components/Panels';
 import { buildSystem, rememberedFact, looksSecret } from './lib/personas';
 import { speak } from './lib/speech';
-import { fetchModels, streamChat, toApiMessages, exportMarkdown, estTokens, kbDeleteAll } from './lib/api';
+import { fetchModels, streamChat, toApiMessages, estTokens, kbDeleteAll } from './lib/api';
 
 const STARTERS = [
   { label: 'Code', Icon: CodeIcon, t: 'Build a responsive React + MUI login page with full code' },
@@ -144,8 +144,8 @@ export default function App() {
         const mine = s.model?.provider === 'mine' && (s.myModels || []).find((x) => x.id === s.model.id);
         const ok = mine ? has(mine.base) : has(s.model);
         if (ok || !list.length) return s;
-        // Prefer a fast free model (Groq/Cerebras), then Gemini Flash, then local Ollama, then any free one
-        const pick = list.find((m) => m.own && /-pro(:|$)/.test(m.id)) || list.find((m) => m.own) || list.find((m) => m.fast &&/llama-3\.3-70b|llama3\.3|gpt-oss-120b/.test(m.id)) || list.find((m) => m.fast)
+        // Prefer your own model (Learn Code+ once trained, else Learn), then a fast free one, then Gemini Flash, local Ollama, any free one
+        const pick = list.find((m) => m.own && m.default && !m.hidden) || list.find((m) => m.own && !m.hidden) || list.find((m) => m.fast &&/llama-3\.3-70b|llama3\.3|gpt-oss-120b/.test(m.id)) || list.find((m) => m.fast)
           || list.find((m) => m.provider === 'gemini' && /flash/.test(m.id) && !/preview|exp|tts|lite/.test(m.id))
           || list.find((m) => m.provider === 'ollama') || list.find((m) => m.free) || list[0];
         return { ...s, model: { provider: pick.provider, id: pick.id } };
@@ -175,11 +175,16 @@ export default function App() {
 
   const updateChat = useCallback((id, fn) => setChats((cs) => cs.map((c) => (c.id === id ? fn(c) : c))), []);
 
-  const run = useCallback(async (chatId, history) => {
+  const run = useCallback(async (chatId, history, opts = {}) => {
     // "My model" = a base model + your own instructions, knowledge and temperature
     const mine = settings.model?.provider === 'mine' ? settings.myModels.find((x) => x.id === settings.model.id) : null;
     if (settings.model?.provider === 'mine' && !mine?.base) return;
     let model = mine ? { ...mine.base, mine: `${mine.icon} ${mine.name}` } : settings.model;
+    // 🧠 Max quality (message box): your own Learn / Learn Code+ → Learn Max for this message (bigger, slower)
+    if (settings.quality === 'max' && model.provider === 'ollama' && models.some((x) => x.own && !x.hidden && x.id === model.id)) {
+      const max = models.find((x) => x.own && /-max(:|$)/.test(x.id));
+      if (max) model = { provider: max.provider, id: max.id, mine: model.mine };
+    }
     // A photo needs a model that can see. Text-only models (e.g. Learn Lite) → use a vision model for this message.
     let note = null;
     const lastUser = history[history.length - 1];
@@ -203,11 +208,11 @@ export default function App() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    let text = '', reasoning = '', error = false, usage = null, raf = 0, sources = null, cost = null, search = null, tools = null, verify = null, steps = null, savedMemory = false;
+    let text = '', reasoning = '', error = false, usage = null, raf = 0, sources = null, cost = null, search = null, tools = null, verify = null, steps = null, speed = null, savedMemory = false;
     const flush = () => {
       raf = 0;
       updateChat(chatId, (c) => ({
-        ...c, messages: c.messages.map((m) => (m.id === asstId ? { ...m, content: text, reasoning, error, usage, sent: m.sent, sources, cost, search, tools, verify, steps } : m)),
+        ...c, messages: c.messages.map((m) => (m.id === asstId ? { ...m, content: text, reasoning, error, usage, sent: m.sent, sources, cost, search, tools, verify, steps, speed } : m)),
       }));
     };
     const remember = (fact) => {
@@ -236,12 +241,16 @@ export default function App() {
         reasoning: settings.reasoning || 'balanced', // fast / balanced / expert
         tools: settings.tools || 'auto',
         allowCode: !!settings.allowCode,
-        bigJobs: settings.bigJobs || 'auto',
+        extendedThinking: !!settings.extendedThinking, // Learn thinks before every answer (otherwise only when needed)
+        style: settings.style && settings.style !== 'normal' ? settings.style : '', // concise / explanatory / formal
+        regenerate: !!opts.regenerate, // a fresh answer, never the 10-minute cached one
+        research: !!settings.research, // 3-5 web searches on sub-questions → a structured report with sources
       }, {
         signal: ctrl.signal,
         onTool: (t) => { tools = [...(tools || []).filter((x) => x.id !== t.id), t]; schedule(); },
         onMemory: remember,
         onVerify: (v) => { verify = v; schedule(); },
+        onSpeed: (v) => { speed = v; schedule(); },
         onStep: (s) => { const cur = steps || []; steps = cur.some((x) => x.id === s.id) ? cur.map((x) => (x.id === s.id ? s : x)) : [...cur, s]; schedule(); },
         onSources: (s) => { sources = s; schedule(); },
         onCost: (c) => { cost = c; schedule(); },
@@ -311,9 +320,24 @@ export default function App() {
     run(chat.id, history);
   };
 
+  // 👍 / 👎 / ✏️ on an answer. For local Learn answers this is training data: good → lesson, corrected → lesson + preference pair
+  // (your version beats the original), bad → retried by npm run self-train. Online AIs' answers are never sent (their terms forbid it).
+  const giveFeedback = (m, v, extra = {}) => {
+    const unset = v !== 'corrected' && m.feedback === v && !extra.note;
+    updateChat(chat.id, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, feedback: unset ? null : v, ...(v === 'corrected' ? { correction: extra.corrected } : {}) } : x)) }));
+    if (unset || m.model?.provider !== 'ollama') return;
+    const idx = chat.messages.findIndex((x) => x.id === m.id);
+    const prompt = chat.messages.slice(Math.max(0, idx - 5), idx).filter((x) => x.role === 'user' || x.role === 'assistant')
+      .map((x) => ({ role: x.role, content: `${x.content || ''}${(x.files || []).map((f) => `\n\n--- File: ${f.name} ---\n${f.text}`).join('')}` }));
+    fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      chatId: chat.id, messageId: m.id, model: m.model.id, provider: m.model.provider, prompt, answer: m.content,
+      rating: v === 'up' ? 'good' : v === 'down' ? 'bad' : 'corrected', corrected: extra.corrected, note: extra.note,
+    }) }).catch(() => {});
+  };
+
   const regenerate = () => {
     const lastUser = chat.messages.map((m) => m.role).lastIndexOf('user');
-    if (lastUser >= 0) run(chat.id, chat.messages.slice(0, lastUser + 1));
+    if (lastUser >= 0) run(chat.id, chat.messages.slice(0, lastUser + 1), { regenerate: true });
   };
 
   const startNew = (projectId = activeProject) => {
@@ -525,7 +549,7 @@ export default function App() {
                         <Message key={m.id} m={m} isLast={i === chat.messages.length - 1} fontSize={settings.fontSize} baseFiles={projectBase[i]}
                           onAsk={(q) => !streaming && send({ text: q, images: [], files: [] })}
                           streaming={streaming} onEdit={edit} onRegenerate={regenerate}
-                          onFeedback={(v) => updateChat(chat.id, (c) => ({ ...c, messages: c.messages.map((x) => (x.id === m.id ? { ...x, feedback: x.feedback === v ? null : v } : x)) }))}
+                          onFeedback={(v, extra) => giveFeedback(m, v, extra)}
                           onPreview={(code, lang, title, files) => setPreview({ code: code || '', lang, title, files })} />
                       ))}
                     </Box>

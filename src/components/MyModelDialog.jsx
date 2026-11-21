@@ -8,7 +8,7 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import { uid } from '../lib/storage';
 import { kbList, kbUpload, kbDelete, kbDeleteAll, kbAddText } from '../lib/api';
 
-const ACCEPT = '.pdf,.docx,.txt,.md,.csv,.json,.html,.htm,.xml,.yml,.yaml,.log,.sql,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.css';
+const ACCEPT = '.pdf,.docx,.xlsx,.txt,.md,.csv,.json,.html,.htm,.xml,.yml,.yaml,.log,.sql,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.css';
 
 /** Upload area + list of files this model knows. Files live on this PC in data/kb/. */
 function DataSection({ modelId }) {

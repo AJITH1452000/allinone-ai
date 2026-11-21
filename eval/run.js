@@ -1,9 +1,9 @@
 // Evolvix evaluation engine — measures a model's accuracy across 11 categories through the REAL app
 // pipeline (system prompt, tools, safety), then compares with the previous run to catch regressions.
 //
-//   npm run eval -- learn-pro                 (needs "npm run dev" running)
-//   npm run eval -- learn-max --mode expert
-//   npm run eval -- learn-code --only programming,tool_usage
+//   npm run eval -- learn                     (needs "npm run dev" running)
+//   npm run eval -- learn --mode expert
+//   npm run eval -- learn-codeplus --only programming,tool_usage
 //   npm run eval -- gemini-2.5-flash --provider gemini
 import fs from 'fs';
 import path from 'path';
@@ -13,12 +13,18 @@ import { runJavaScript } from '../engines.js';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : def; };
-const model = argv.find((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')) || 'learn-pro';
+const model = argv.find((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')) || 'learn';
 const provider = flag('provider', 'ollama');
 const mode = flag('mode', 'balanced');
 const only = flag('only', '')?.split(',').filter(Boolean);
 const API = flag('api', 'http://localhost:3001');
 const modelId = provider === 'ollama' && !model.includes(':') ? `${model}:latest` : model;
+// My exam (eval/mywork): npm run eval -- learn --suite mywork [--limit N] [--only component,bugfix,feature,project]
+if (flag('suite', '') === 'mywork') {
+  const { runMywork } = await import('./mywork.mjs');
+  await runMywork({ model: modelId, provider, API, limit: Number(flag('limit', 0)) || 0, only: flag('only', '') || '', sample: Number(flag('sample', 0)) || 0 });
+  process.exit(0);
+}
 
 const tests = JSON.parse(fs.readFileSync(path.join(dir, 'tests.json'), 'utf8')).filter((t) => !only?.length || only.includes(t.category));
 

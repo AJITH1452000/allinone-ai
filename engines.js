@@ -1,8 +1,11 @@
 // Evolvix engines — the parts of an "advanced AI" that are real code, not model settings:
 //   Math engine (exact calculator) · Code execution (sandboxed) · Tool calling (agent loop)
 //   Reasoning modes (fast / balanced / expert + self-check) · Safety (prompt-injection guard)
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import os from 'os';
+import fs from 'fs';
+import { SANDBOX_NO_NET } from './office/core.js';
+import path from 'path';
 
 // ───────────────────────── Math engine ─────────────────────────
 // A small, safe expression parser (no eval). Supports + - * / ^, mod, %, !, parentheses,
@@ -94,7 +97,50 @@ export function runJavaScript(code, { timeoutMs = 5000 } = {}) {
     child.stderr.on('data', (d) => { err += d; });
     child.on('error', (e) => finish(`\n${e.message}`));
     child.on('close', () => finish());
-    child.stdin.end(String(code));
+    // Office mode: the sandboxed code gets no network at all (fetch, net, http, https, tls, dgram all throw)
+    child.stdin.end((process.env.OFFICE_MODE === '1' ? SANDBOX_NO_NET : '') + String(code));
+  });
+}
+
+// ───────────────────────── Python runner (only if `python` is on PATH; off by default like JS) ─────────────────────────
+// Isolated mode (-I: no user site/env), a fresh empty temp folder as cwd, 5 s limit, network calls blocked,
+// 64 MB memory cap where the OS supports it (Linux/macOS; Windows has no per-process limit from Python).
+const PY = (() => {
+  for (const exe of ['python', 'python3', 'py']) {
+    try {
+      const r = spawnSync(exe, ['--version'], { encoding: 'utf8', timeout: 4000, windowsHide: true });
+      if (r.status === 0 && /^Python 3/.test(`${r.stdout}${r.stderr}`.trim())) return exe;
+    } catch {}
+  }
+  return null;
+})();
+export const HAS_PYTHON = !!PY;
+const PY_PRELUDE = `import socket as _s
+def _no_net(*a, **k): raise PermissionError("network is blocked in this sandbox")
+_s.socket = _no_net; _s.create_connection = _no_net
+try:
+    import resource as _r; _r.setrlimit(_r.RLIMIT_AS, (64 * 1024 * 1024, 64 * 1024 * 1024))
+except Exception: pass
+del _s, _r
+`;
+export function runPython(code, { timeoutMs = 5000 } = {}) {
+  return new Promise((resolve) => {
+    if (!PY) return resolve({ ok: false, stdout: '', stderr: 'Python is not installed on this PC.' });
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'evx-py-'));
+    const child = spawn(PY, ['-I', '-'], { cwd, env: { PYTHONIOENCODING: 'utf-8', SYSTEMROOT: process.env.SYSTEMROOT || '' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let out = '', err = '', done = false;
+    const cap = (s) => (s.length > 8000 ? `${s.slice(0, 8000)}\n…[output trimmed]` : s);
+    const finish = (extra) => {
+      if (done) return; done = true; clearTimeout(t);
+      try { fs.rmSync(cwd, { recursive: true, force: true }); } catch {}
+      resolve({ ok: !extra && !err, stdout: cap(out), stderr: cap(err + (extra || '')) });
+    };
+    const t = setTimeout(() => { child.kill('SIGKILL'); finish(`\nStopped: took longer than ${timeoutMs / 1000} s`); }, timeoutMs);
+    child.stdout.on('data', (d) => { out += d; if (out.length > 20000) child.kill('SIGKILL'); });
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', (e) => finish(`\n${e.message}`));
+    child.on('close', () => finish());
+    child.stdin.end(PY_PRELUDE + String(code));
   });
 }
 
@@ -183,6 +229,39 @@ export const TOOL_DEFS = {
       parameters: { type: 'object', properties: { code: { type: 'string', description: 'JavaScript source code' } }, required: ['code'] },
     },
   },
+  // Coding tools for Learn (local only): look things up and check code instead of relying on memory
+  docs_search: {
+    type: 'function',
+    function: {
+      name: 'docs_search',
+      description: 'Search the official React, MUI, Vite and Recharts docs for the exact API: component props, hook signatures, config options. Use it before using an API you are not 100% sure about.',
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look up, e.g. "MUI TextField helperText error props"' } }, required: ['query'] },
+    },
+  },
+  mycode_search: {
+    type: 'function',
+    function: {
+      name: 'mycode_search',
+      description: "Search the user's own earlier projects for working code to reuse (their patterns, style and components).",
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look for, e.g. "sidebar drawer with menu groups"' } }, required: ['query'] },
+    },
+  },
+  run_check: {
+    type: 'function',
+    function: {
+      name: 'run_check',
+      description: 'Check React/JS code before answering: syntax, missing imports, MUI component and icon names, keys in lists, hooks rules, TODO/"..." placeholders. Returns the exact problems or "OK".',
+      parameters: { type: 'object', properties: { code: { type: 'string', description: 'The complete file (JSX/JS) to check' } }, required: ['code'] },
+    },
+  },
+  run_python: {
+    type: 'function',
+    function: {
+      name: 'run_python',
+      description: 'Run Python 3 in a sandbox and get what it prints. Use print() for output. No network, 5 second limit. Use it for data analysis and exact calculations on data the user gave (e.g. an attached CSV pasted into the code).',
+      parameters: { type: 'object', properties: { code: { type: 'string', description: 'Python source code' } }, required: ['code'] },
+    },
+  },
   web_search: {
     type: 'function',
     function: {
@@ -246,6 +325,22 @@ export async function runTool(name, args = {}, ctx = {}) {
       if (!ctx.allowCode) return { error: 'Code execution is turned off. The user can enable it in the + menu → "Run code".' };
       const r = await runJavaScript(args.code);
       return r.ok ? { output: r.stdout || '(no output — use console.log)' } : { output: r.stdout, error: r.stderr.trim() };
+    }
+    if (name === 'docs_search' || name === 'mycode_search') {
+      if (!ctx.kbSearch) return { error: 'Not available here.' };
+      const hits = await ctx.kbSearch(name === 'docs_search' ? 'docs' : 'mycode', String(args.query || ''));
+      return hits.length ? { results: hits.map((h) => ({ source: h.name, text: guardInjection(h.text).cleaned })) }
+        : { results: [], note: name === 'docs_search' ? 'Nothing found. (The docs are loaded with: npm run load-docs)' : 'Nothing found. (Add projects with: npm run add-my-code <folder>)' };
+    }
+    if (name === 'run_check') {
+      if (!ctx.check) return { error: 'Not available here.' };
+      const errors = await ctx.check('```jsx\n' + String(args.code || '') + '\n```');
+      return errors.length ? { problems: errors } : { result: 'OK — no problems found' };
+    }
+    if (name === 'run_python') {
+      if (!ctx.allowCode) return { error: 'Code execution is turned off. The user can enable it in the + menu → "Run code".' };
+      const r = await runPython(args.code);
+      return r.ok ? { output: r.stdout || '(no output — use print)' } : { output: r.stdout, error: r.stderr.trim() };
     }
     if (name === 'web_search') {
       const found = await ctx.search(String(args.query || ''));

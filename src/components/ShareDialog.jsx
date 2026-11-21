@@ -5,6 +5,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CodeIcon from '@mui/icons-material/Code';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { parseSpecial } from './Message';
+import { exportAllowed } from '../lib/api';
 
 const esc = (s = '') => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const who = (m) => (m.role === 'user' ? 'You' : (m.model?.mine || m.model?.id?.replace(/:latest$/, '') || 'AI'));
@@ -64,7 +65,7 @@ export default function ShareDialog({ chat, onClose }) {
         <Typography noWrap sx={{ fontSize: 13, color: 'text.secondary', mb: 2 }}>{chat.title} · {chat.messages.length} messages</Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {opts.map(([Icon, t, d, fn]) => (
-            <Button key={t} onClick={fn} color="inherit" sx={{ justifyContent: 'flex-start', gap: 1.5, p: 1.5, borderRadius: '12px', border: 1, borderColor: 'divider', textAlign: 'left' }}>
+            <Button key={t} onClick={async () => { if (await exportAllowed(`share: ${t}`)) fn(); }} color="inherit" sx={{ justifyContent: 'flex-start', gap: 1.5, p: 1.5, borderRadius: '12px', border: 1, borderColor: 'divider', textAlign: 'left' }}>
               <Icon sx={{ color: 'text.secondary' }} />
               <Box><Typography sx={{ fontSize: 14, fontWeight: 600 }}>{t}</Typography><Typography sx={{ fontSize: 12.5, color: 'text.secondary', fontWeight: 400 }}>{d}</Typography></Box>
             </Button>

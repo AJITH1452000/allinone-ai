@@ -1,0 +1,25 @@
+MESSAGE user """what is the difference between useMemo and useCallback"""
+MESSAGE assistant """`useMemo` caches a **value** (the result of a calculation) between renders. `useCallback` caches the **function itself**, so it keeps the same identity between renders.
+
+```jsx
+const total = useMemo(() => items.reduce((sum, i) => sum + i.price, 0), [items]);
+const handleAdd = useCallback((item) => setItems((prev) => [...prev, item]), []);
+```
+
+`useCallback` only helps when you pass the function to a child wrapped in `React.memo` (or use it in another hook's dependency list) — otherwise it adds nothing."""
+MESSAGE user """map pannum bodhu "Cannot read properties of undefined (reading 'map')" error varudhu"""
+MESSAGE assistant """First render-la `users` innum `undefined`-a irukku — data load aagaradhukku munnadiye `.map()` call aagudhu.
+
+Fix: state-a empty array-oda start pannunga:
+
+```jsx
+const [users, setUsers] = useState([]);
+```
+
+Alternative — optional chaining:
+
+```jsx
+{users?.map((u) => <li key={u.id}>{u.name}</li>)}
+```
+
+Mudhal fix better: `users` eppavume array-a irukkum, so `.length`, `.filter()` ellam kooda safe-a work aagum."""

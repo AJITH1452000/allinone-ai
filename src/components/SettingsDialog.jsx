@@ -9,6 +9,11 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
+import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import { AccessTab, AuditTab, AdminTab, ConsentTab } from './OfficeAdmin';
 import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PsychologyAltOutlinedIcon from '@mui/icons-material/PsychologyAltOutlined';
@@ -21,6 +26,7 @@ export const SETTINGS_TABS = [
   { id: 'memory', label: 'Memory', Icon: PsychologyAltOutlinedIcon },
   { id: 'models', label: 'Models & tokens', Icon: AutoAwesomeOutlinedIcon },
   { id: 'keys', label: 'API keys', Icon: KeyOutlinedIcon },
+  { id: 'training', label: 'Training', Icon: SchoolOutlinedIcon },
   { id: 'data', label: 'Data controls', Icon: StorageOutlinedIcon },
   { id: 'shortcuts', label: 'Shortcuts', Icon: KeyboardOutlinedIcon },
   { id: 'about', label: 'About', Icon: InfoOutlinedIcon },
@@ -38,6 +44,44 @@ export const SHORTCUTS = [
 ];
 
 /** Long-term memory: facts the AI keeps across all chats. Stored only in this browser. */
+// Settings → Training: what Learn has learned from (your 👍 / ✏️ / 👎, self-practice, your code, open-source code)
+function TrainingTab() {
+  const [st, setSt] = useState(null);
+  useEffect(() => { fetch('/api/training/stats').then((r) => r.json()).then(setSt).catch(() => setSt({ error: true })); }, []);
+  if (!st) return <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Loading…</Typography>;
+  if (st.error) return <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>Training data lives on your PC — run the app locally to see it.</Typography>;
+  const tiles = [['👍 Good', st.good], ['✏️ Corrected', st.corrected], ['👎 Bad', st.bad], ['Pairs', st.pairs], ['Lessons', st.lessons]];
+  const files = Object.entries(st.files || {}).filter(([, n]) => n > 0);
+  return (
+    <>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: 1, mb: 2 }}>
+        {tiles.map(([l, n]) => (
+          <Box key={l} sx={{ p: 1.25, borderRadius: '12px', border: 1, borderColor: 'divider', textAlign: 'center' }}>
+            <Typography sx={{ fontSize: 22, fontWeight: 700 }}>{n}</Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{l}</Typography>
+          </Box>
+        ))}
+      </Box>
+      <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1.5 }}>
+        Press 👍 / 👎 / ✏️ under Learn's answers. Corrections count double. Answers from online AIs are never saved (their terms forbid training on them).
+      </Typography>
+      {files.map(([name, n]) => (
+        <Row key={name} title={`${name}.jsonl`} desc={`${n} row${n === 1 ? '' : 's'}`}>
+          <Button variant="outlined" color="inherit" size="small" href={`/api/training/file/${name}`} sx={{ borderColor: 'divider' }}>Export</Button>
+        </Row>
+      ))}
+      {!!Object.keys(st.quality || {}).length && (
+        <>
+          <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 2, mb: 0.5 }}>How answers got verified</Typography>
+          {Object.entries(st.quality).sort((a, b) => b[1] - a[1]).map(([k, n]) => (
+            <Typography key={k} sx={{ fontSize: 13, color: 'text.secondary' }}>{k} — {n}×</Typography>
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
 function MemoryTab({ settings, setSettings }) {
   const [draft, setDraft] = useState('');
   const list = settings.memories || [];
@@ -225,16 +269,15 @@ export default function SettingsDialog({ open, onClose, tab: initialTab = 'gener
       </>
     ),
     memory: <MemoryTab settings={settings} setSettings={setSettings} />,
+    training: window.__EVX_OFFICE && window.__EVX_USER?.role !== 'owner' ? <ConsentTab /> : <TrainingTab />,
+    access: <AccessTab />,
+    audit: <AuditTab />,
+    admin: <AdminTab />,
     models: (
       <>
         <Row title="Reasoning mode" desc="Fast = quick answers. Expert = plans step by step and double-checks itself (slower). Also in the message box.">
           <ToggleButtonGroup size="small" exclusive value={settings.reasoning || 'balanced'} onChange={(_, v) => v && set('reasoning', v)}>
             <ToggleButton value="fast">⚡ Fast</ToggleButton><ToggleButton value="balanced">Balanced</ToggleButton><ToggleButton value="expert">🧠 Expert</ToggleButton>
-          </ToggleButtonGroup>
-        </Row>
-        <Row title="Big jobs (full projects)" desc="Auto: when a free online key (Gemini, Groq or OpenRouter) is connected, full React projects and their fixes use it — much better results than models on this PC. Local: always use the model you picked (private, slower).">
-          <ToggleButtonGroup size="small" exclusive value={settings.bigJobs || 'auto'} onChange={(_, v) => v && set('bigJobs', v)}>
-            <ToggleButton value="auto">Auto</ToggleButton><ToggleButton value="local">Always local</ToggleButton>
           </ToggleButtonGroup>
         </Row>
         <Row title="Use tools" desc="Exact calculator, date counter, memory and web search when a message needs them (models that support tools).">
@@ -322,7 +365,12 @@ export default function SettingsDialog({ open, onClose, tab: initialTab = 'gener
     ),
   };
 
-  const current = SETTINGS_TABS.find((t) => t.id === tab) || SETTINGS_TABS[0];
+  // Office mode: the owner also gets Access / Audit / Admin; users don't see keys or data controls
+  const owner = window.__EVX_OFFICE && window.__EVX_USER?.role === 'owner';
+  const TABS = !window.__EVX_OFFICE ? SETTINGS_TABS
+    : owner ? [...SETTINGS_TABS, { id: 'access', label: 'Access', Icon: HowToRegOutlinedIcon }, { id: 'audit', label: 'Audit', Icon: ReceiptLongOutlinedIcon }, { id: 'admin', label: 'Admin', Icon: AdminPanelSettingsOutlinedIcon }]
+      : SETTINGS_TABS.filter((t) => !['keys', 'data'].includes(t.id));
+  const current = TABS.find((t) => t.id === tab) || TABS[0];
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md" fullScreen={full}
       PaperProps={{ sx: { borderRadius: full ? 0 : '20px', height: full ? '100%' : 'min(640px, 88vh)', overflow: 'hidden' } }}>
@@ -334,7 +382,7 @@ export default function SettingsDialog({ open, onClose, tab: initialTab = 'gener
             <IconButton size="small" onClick={onClose} sx={{ display: { sm: 'none' } }}><CloseIcon fontSize="small" /></IconButton>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: { xs: 'row', sm: 'column' }, gap: 0.25, overflowX: 'auto' }}>
-            {SETTINGS_TABS.map(({ id, label, Icon }) => (
+            {TABS.map(({ id, label, Icon }) => (
               <ButtonBase key={id} onClick={() => setTab(id)} sx={{
                 justifyContent: 'flex-start', gap: 1.25, px: 1.25, py: 0.9, borderRadius: '10px', fontSize: 13.5, flexShrink: 0,
                 fontWeight: tab === id ? 600 : 400, bgcolor: tab === id ? 'action.selected' : 'transparent', '&:hover': { bgcolor: 'action.hover' },

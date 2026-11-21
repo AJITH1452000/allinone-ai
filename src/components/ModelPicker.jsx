@@ -219,6 +219,9 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
   const [tab, setTab] = useState(0);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  // Only your own Learn models by default; "Show all models" (remembered in this browser) adds other providers' models
+  const [showAll, setShowAllState] = useState(() => { try { return localStorage.getItem('evx.showAllModels') === '1'; } catch { return false; } });
+  const setShowAll = (v) => { setShowAllState(v); if (!v) setFilter('all'); try { localStorage.setItem('evx.showAllModels', v ? '1' : '0'); } catch {} };
   const [providers, setProviders] = useState([]);
   const searchRef = useRef();
   const fullScreen = useMediaQuery('(max-width:600px)');
@@ -233,6 +236,8 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
   const list = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     return models.filter((m) => {
+      if (m.hidden) return false; // learn-vision / learn-max: used automatically or via the ⚡/🧠 switch
+      if (!showAll && !m.own) return false;
       if (freeOnly && !m.free) return false;
       if (filter === 'free' && !m.free) return false;
       if (filter === 'fast' && !m.fast) return false;
@@ -241,10 +246,13 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
       const hay = `${m.id} ${m.providerName}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-  }, [models, q, filter, freeOnly]);
+  }, [models, q, filter, freeOnly, showAll]);
 
-  const ownList = list.filter((m) => m.own);
+  // Your own Learn models always stay on top, whatever filter is chosen (only the search box narrows them)
+  const ownList = models.filter((m) => m.own && !m.hidden && q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => `${m.id} ${m.label}`.toLowerCase().includes(w)));
   const otherList = list.filter((m) => !m.own);
+  // Everything else is grouped by provider, each group with its icon
+  const groups = [...new Set(otherList.map((m) => m.provider))].map((p) => ({ p, name: otherList.find((m) => m.provider === p)?.providerName || p, items: otherList.filter((m) => m.provider === p) }));
   const familyName = models.find((m) => m.own)?.providerName?.split(" · ")[0] || "Learn";
   const pick = (m) => { onChange({ provider: m.provider, id: m.id }); setOpen(false); setQ(''); };
   const connected = providers.filter((p) => p.connected).length;
@@ -284,11 +292,13 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                   onKeyDown={(e) => e.key === 'Enter' && list[0] && pick(list[0])} />
               </Box>
               <Box sx={{ display: 'flex', gap: 0.75, mt: 1.25, overflowX: 'auto', pb: 0.5, '&::-webkit-scrollbar': { display: 'none' } }}>
-                {[['all', 'All'], ['free', 'Free'], ['fast', '⚡ Fast'], ['vision', 'Vision']].map(([k, l]) => (
+                <Chip size="small" label={showAll ? '✓ Show all models' : 'Show all models'} onClick={() => setShowAll(!showAll)}
+                  color={showAll ? 'secondary' : 'default'} variant={showAll ? 'filled' : 'outlined'} />
+                {showAll && [['all', 'All'], ['free', 'Free'], ['fast', '⚡ Fast'], ['vision', 'Vision']].map(([k, l]) => (
                   <Chip key={k} label={l} size="small" onClick={() => setFilter(k)} color={filter === k ? 'primary' : 'default'}
                     variant={filter === k ? 'filled' : 'outlined'} />
                 ))}
-                {providerIds.map((id) => (
+                {showAll && providerIds.map((id) => (
                   <Chip key={id} size="small" avatar={<Box sx={{ display: 'grid !important', placeItems: 'center' }}><ProviderAvatar id={id} size={18} /></Box>}
                     label={models.find((m) => m.provider === id && !m.own)?.providerName || 'Ollama (local)'} onClick={() => setFilter(id)}
                     color={filter === id ? 'primary' : 'default'} variant={filter === id ? 'filled' : 'outlined'} />
@@ -296,8 +306,9 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
               </Box>
             </Box>
             <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 1 }}>
-              {/* 1. Your own model family (Learn Lite / Pro / Max) */}
-              {filter === 'all' && (
+              {/* 1. Your own model family (Learn, and Learn Code+ once you've trained it) — always on top, under every filter */}
+              {(
+
                 <>
                   <Section title={`${familyName} · your models`} />
                   {ownList.map((m) => (
@@ -327,7 +338,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                           bgcolor: active ? (t) => alpha(t.palette.primary.main, 0.08) : 'transparent',
                           '&:hover': { bgcolor: (t) => alpha(t.palette.text.primary, 0.05) },
                         }}>
-                          <Box sx={{ width: 22, fontSize: 18, textAlign: 'center' }}>{x.icon}</Box>
+                          <Box sx={{ width: 22, fontSize: 18, textAlign: 'center' }}>{x.icon || '🤖'}</Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography noWrap sx={{ fontSize: 14, fontWeight: 500 }}>{x.name}</Typography>
                             <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>
@@ -345,16 +356,20 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                       Make an assistant with your own instructions and files (PDF, Word, notes).
                     </Typography>
                   )}
-                  <Section title="All models" />
                 </>
               )}
 
-              {/* 3. Everything else */}
-              {(filter === 'all' ? otherList : list).map((m) => (
-                <ModelRow key={`${m.provider}:${m.id}`} m={m} onPick={pick}
-                  active={value && value.provider === m.provider && value.id === m.id} />
+              {/* 3. Everything else, grouped by provider (each group with its icon) */}
+              {groups.map((g) => (
+                <Box key={g.p}>
+                  <Section title={<Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}><ProviderAvatar id={g.p} size={16} />{g.name}</Box>} />
+                  {g.items.map((m) => (
+                    <ModelRow key={`${m.provider}:${m.id}`} m={m} onPick={pick}
+                      active={value && value.provider === m.provider && value.id === m.id} />
+                  ))}
+                </Box>
               ))}
-              {!list.length && (
+              {!otherList.length && showAll && (
                 <Box sx={{ textAlign: 'center', py: 6, px: 3 }}>
                   <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{models.length ? 'No matching models' : 'No models yet'}</Typography>
                   <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 2 }}>
@@ -363,7 +378,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                   <Button variant="contained" disableElevation onClick={() => setTab(1)} sx={{ borderRadius: 2 }}>Connect providers</Button>
                 </Box>
               )}
-              {!!list.length && models.length < 10 && (
+              {showAll && !!list.length && models.length < 10 && (
                 <ButtonBase onClick={() => setTab(1)} sx={{ width: '100%', mt: 1, p: 1.5, borderRadius: 2, border: 1, borderStyle: 'dashed', borderColor: 'divider', color: 'text.secondary', fontSize: 13.5 }}>
                   + Add Google Gemini, Claude, OpenRouter (300+ models)…
                 </ButtonBase>
