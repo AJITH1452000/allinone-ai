@@ -109,7 +109,9 @@ async function listModels(id, status) {
     return list;
   } catch (e) {
     const msg = e.name === 'AbortError' ? 'not reachable (timed out)'
-      : e.cause?.code === 'ECONNREFUSED' ? 'not running' : (e.cause?.code || e.message);
+      : e.cause?.code === 'ECONNREFUSED' ? 'not running'
+      : e.cause?.code === 'ENOTFOUND' ? `address not found (${e.cause.hostname || p.base}) — tunnel expired? run npm run learn-online`
+      : (e.cause?.code || e.message);
     status.push({ id, name: p.name, ok: false, error: msg });
     if (id !== 'ollama') console.warn(`[models] ${id}: ${msg}`);
     return [];
