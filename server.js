@@ -13,7 +13,7 @@ import { webSearch, needsSearch, withResults, resolveShort, shortUrl, isBuildReq
 import { guardInjection, needsTools, runTool, parseTextToolCalls, TOOL_DEFS, REASONING, verifyMessages, HAS_PYTHON } from './engines.js';
 import { checkProject } from './buildcheck.js';
 import { checkCode, codeBlocks, warmCodeCheck } from './codecheck.js';
-import { isPackageQuestion, packageQuery, searchPackages, fmtWeekly } from './npmsearch.js';
+import { isLibraryQuestion, ecosystemOf, packageQuery, searchPackages, searchPackagist, verifyPyPI, fmtWeekly } from './npmsearch.js';
 import helmet from 'helmet';
 import https from 'https';
 import os from 'os';
@@ -796,14 +796,29 @@ After the last file: at most 3 short lines (how to run).)` }];
       const hits = await kb.search('docs', meantLine || lastText, { k: 3, budget: 2500 }).catch(() => []);
       if (hits.length) ref = `\n\n(Reference docs — use them ONLY if they are about what I asked, otherwise ignore them completely:\n${hits.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
-    // "Which package / library…": the REAL packages from the npm registry (sorted by weekly downloads) — never guessed names
-    if (isPackageQuestion(lastText) || isPackageQuestion(meantLine)) {
+    // "Which package / library…" in ANY stack: the REAL packages from the official registry — never guessed names.
+    //   npm (JavaScript, TypeScript, React, HTML/CSS tools, Tailwind CSS plugins) · PyPI (Python) · Packagist (PHP)
+    const libText = `${lastText} ${meantLine}`;
+    const eco = isLibraryQuestion(libText) ? ecosystemOf(libText) : null;
+    if (eco && eco !== 'other') {
       const q = packageQuery(meantLine || lastText);
-      const pk = await searchPackages(q, { react: /react|view|show|render|component|ui/i.test(meantLine || lastText) }).catch(() => []);
+      let pk = [], registry = '', install = '', size = (p) => '';
+      if (eco === 'npm') {
+        pk = await searchPackages(q, { react: /react|view|show|render|component|ui/i.test(libText) }).catch(() => []);
+        registry = 'npm registry'; install = 'npm install'; size = (p) => `${p.name}@${p.version} (${fmtWeekly(p.weekly)} downloads/week)`;
+      } else if (eco === 'packagist') {
+        pk = await searchPackagist(q).catch(() => []);
+        registry = 'Packagist (PHP)'; install = 'composer require'; size = (p) => `${p.name} (${fmtWeekly(p.total)} downloads in total)`;
+      } else {
+        // PyPI has no open search: the model proposes names, PyPI confirms which really exist (with real versions + downloads)
+        const names = await pass(`List 12 real, popular, actively maintained Python packages on PyPI for: ${meantLine || lastText}. Reply with package names only, comma-separated.`, { max: 100, temperature: 0, ms: 20_000, history: false, bare: true });
+        pk = await verifyPyPI(names.split(/[,\n]/).map((n) => n.replace(/[`*\-\d.)\s]+$|^[\s`*\-\d.)]+/g, '').split(/\s/)[0])).catch(() => []);
+        registry = 'PyPI (Python)'; install = 'pip install'; size = (p) => `${p.name} ${p.version} (${fmtWeekly(p.weekly)} downloads/week)`;
+      }
       if (ctrl.signal.aborted) return res.end();
       if (pk.length) {
-        send({ t: 'note', v: `📦 Looked up the npm registry: ${pk.length} real packages for “${q}”` });
-        ref += `\n\n(npm registry results — REAL packages with weekly downloads. Recommend ONLY packages from this list: group them by what they do (create / view / read / edit / convert), say what each is for in one line, mark the best pick for React + Vite, and give the install command. Never invent package names or scripts:\n${pk.map((p) => `- ${p.name}@${p.version} (${fmtWeekly(p.weekly)} downloads/week): ${p.description}`).join('\n')})`;
+        send({ t: 'note', v: `📦 Looked up ${registry}: ${pk.length} real packages${q ? ` for “${q}”` : ''}` });
+        ref += `\n\n(${registry} results — REAL, current packages. Recommend ONLY packages from this list: a Markdown table grouped by use case (Package | What it's for), mark the best modern pick, then the exact \`${install}\` command. Never invent package names, never suggest deprecated ones, no tutorial script unless I asked for code:\n${pk.map((p) => `- ${size(p)}: ${p.description}`).join('\n')})`;
       }
     }
     // Your own projects (npm run add-my-code) → Learn reuses your patterns and style
@@ -812,7 +827,7 @@ After the last file: at most 3 short lines (how to run).)` }];
       if (mine.length) ref += `\n\n(My earlier working code — reuse its style ONLY if it is about what I asked, otherwise ignore it:\n${mine.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
     // A bare topic ("php", "redux") → ask explicitly for a tutor-style overview (small models follow a direct ask far better than a rule)
-    const overview = shortTopic ? '\n\n(Give a short overview of this topic like a good tutor: what it is in 1–2 sentences, its key features or main options as bullets, one small complete code example in a code block, and when to use it. Do not ask me questions back.)' : '';
+    const overview = shortTopic && !eco ? '\n\n(Give a short overview of this topic like a good tutor: what it is in 1–2 sentences, its key features or main options as bullets, one small complete code example in a code block, and when to use it. Do not ask me questions back.)' : '';
     // /think and /no_think are Qwen3 switches — Learn Code (Qwen2.5-Coder) doesn't think, so it gets neither (nor the thinking hints)
     const hybrid = !/-code(:|$)/.test(String(model));
     msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${meant}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${meant}${overview}${ref}`))];
@@ -1104,7 +1119,7 @@ app.get('/api/training/export', (req, res) => {
 // ---------- Feedback = training data (👍 good · 👎 bad · ✏️ corrected) — ONLY for answers from your local Learn models ----------
 const TRAIN_DIR = path.join(__dirname, 'data', 'training');
 const appendTrain = (name, row) => { fs.mkdirSync(TRAIN_DIR, { recursive: true }); fs.appendFileSync(path.join(TRAIN_DIR, name), JSON.stringify(row) + '\n'); };
-const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|npm registry results|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
+const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|npm registry results|PyPI (Python) results|Packagist (PHP) results|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
 const cleanForTraining = (t) => noThink(t).replace(/\s*\/(no_)?think\s*$/, '').replace(HIDDEN_RE, '').trim();
 app.post('/api/feedback', (req, res) => {
   const { chatId, messageId, model = '', provider = '', prompt = [], answer = '', rating, corrected = '', note = '' } = req.body || {};
