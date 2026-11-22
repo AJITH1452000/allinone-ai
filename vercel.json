@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
-      "maxDuration": 60,
+      "maxDuration": 300,
       "includeFiles": "{server.js,kb.js,search.js,usage.js,paths.js,engines.js,buildcheck.js,codecheck.js,npmsearch.js,office/**,src/lib/project.js,models/**}"
     }
   },

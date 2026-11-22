@@ -800,8 +800,10 @@ After the last file: at most 3 short lines (how to run).)` }];
     //   npm (JavaScript, TypeScript, React, HTML/CSS tools, Tailwind CSS plugins) · PyPI (Python) · Packagist (PHP)
     const libText = `${lastText} ${meantLine}`;
     const eco = isLibraryQuestion(libText) ? ecosystemOf(libText) : null;
-    if (eco && eco !== 'other') {
-      const q = packageQuery(meantLine || lastText);
+    // Only when there is something to look up ("pdf", "excel", "tailwind") — "what is npm" / "what is a library" is a concept question
+    const pkgTopic = eco ? packageQuery(lastText) : '';
+    if (eco && eco !== 'other' && pkgTopic) {
+      const q = packageQuery(meantLine || lastText) || pkgTopic;
       let pk = [], registry = '', install = '', size = (p) => '';
       if (eco === 'npm') {
         pk = await searchPackages(q, { react: /react|view|show|render|component|ui/i.test(libText) }).catch(() => []);
@@ -827,7 +829,7 @@ After the last file: at most 3 short lines (how to run).)` }];
       if (mine.length) ref += `\n\n(My earlier working code — reuse its style ONLY if it is about what I asked, otherwise ignore it:\n${mine.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
     // A bare topic ("php", "redux") → ask explicitly for a tutor-style overview (small models follow a direct ask far better than a rule)
-    const overview = shortTopic && !eco ? '\n\n(Give a short overview of this topic like a good tutor: what it is in 1–2 sentences, its key features or main options as bullets, one small complete code example in a code block, and when to use it. Do not ask me questions back.)' : '';
+    const overview = shortTopic && !(eco && pkgTopic) ? '\n\n(Give a short overview of this topic like a senior developer explaining it to a colleague: what it is in 1–2 sentences, its main parts or options, the most useful commands or a small example in a code block, and how it fits a React + Vite workflow. Use natural short headings — never generic labels like "Overview", "Key Features" or "Small Complete Code Example". Do not ask me questions back.)' : '';
     // /think and /no_think are Qwen3 switches — Learn Code (Qwen2.5-Coder) doesn't think, so it gets neither (nor the thinking hints)
     const hybrid = !/-code(:|$)/.test(String(model));
     msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${meant}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${meant}${overview}${ref}`))];
