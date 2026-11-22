@@ -13,6 +13,7 @@ import { webSearch, needsSearch, withResults, resolveShort, shortUrl, isBuildReq
 import { guardInjection, needsTools, runTool, parseTextToolCalls, TOOL_DEFS, REASONING, verifyMessages, HAS_PYTHON } from './engines.js';
 import { checkProject } from './buildcheck.js';
 import { checkCode, codeBlocks, warmCodeCheck } from './codecheck.js';
+import { isPackageQuestion, packageQuery, searchPackages, fmtWeekly } from './npmsearch.js';
 import helmet from 'helmet';
 import https from 'https';
 import os from 'os';
@@ -795,6 +796,16 @@ After the last file: at most 3 short lines (how to run).)` }];
       const hits = await kb.search('docs', meantLine || lastText, { k: 3, budget: 2500 }).catch(() => []);
       if (hits.length) ref = `\n\n(Reference docs — use them ONLY if they are about what I asked, otherwise ignore them completely:\n${hits.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
+    // "Which package / library…": the REAL packages from the npm registry (sorted by weekly downloads) — never guessed names
+    if (isPackageQuestion(lastText) || isPackageQuestion(meantLine)) {
+      const q = packageQuery(meantLine || lastText);
+      const pk = await searchPackages(q, { react: /react|view|show|render|component|ui/i.test(meantLine || lastText) }).catch(() => []);
+      if (ctrl.signal.aborted) return res.end();
+      if (pk.length) {
+        send({ t: 'note', v: `📦 Looked up the npm registry: ${pk.length} real packages for “${q}”` });
+        ref += `\n\n(npm registry results — REAL packages with weekly downloads. Recommend ONLY packages from this list: group them by what they do (create / view / read / edit / convert), say what each is for in one line, mark the best pick for React + Vite, and give the install command. Never invent package names or scripts:\n${pk.map((p) => `- ${p.name}@${p.version} (${fmtWeekly(p.weekly)} downloads/week): ${p.description}`).join('\n')})`;
+      }
+    }
     // Your own projects (npm run add-my-code) → Learn reuses your patterns and style
     if ((level === 'medium' || level === 'project') && (aboutStack || level === 'project') && !IS_VERCEL) {
       const mine = await kb.search('mycode', meantLine || lastText, { k: 2, budget: 2500 }).catch(() => []);
@@ -1093,7 +1104,7 @@ app.get('/api/training/export', (req, res) => {
 // ---------- Feedback = training data (👍 good · 👎 bad · ✏️ corrected) — ONLY for answers from your local Learn models ----------
 const TRAIN_DIR = path.join(__dirname, 'data', 'training');
 const appendTrain = (name, row) => { fs.mkdirSync(TRAIN_DIR, { recursive: true }); fs.appendFileSync(path.join(TRAIN_DIR, name), JSON.stringify(row) + '\n'); };
-const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
+const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|npm registry results|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
 const cleanForTraining = (t) => noThink(t).replace(/\s*\/(no_)?think\s*$/, '').replace(HIDDEN_RE, '').trim();
 app.post('/api/feedback', (req, res) => {
   const { chatId, messageId, model = '', provider = '', prompt = [], answer = '', rating, corrected = '', note = '' } = req.body || {};
