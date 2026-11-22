@@ -41,7 +41,14 @@ export async function processRepo(src, { limit = 0, toKb = true, log = console.l
     const h = hash(answer);
     if (seen.has(h)) { save(); continue; }
     let request = '';
-    try { request = await requestFor(code, rel); } catch (e) { log(`   ! Learn did not answer (${e.message}) — is Ollama running with "learn"?`); delete s.done[rel]; save(); break; }
+    // Learn busy (answering a chat, loading a model)? wait and retry once; still nothing → skip this file (retried next run)
+    for (let attempt = 0; attempt < 2 && !request; attempt++) {
+      try { request = await requestFor(code, rel); } catch (e) {
+        if (attempt === 0) { log(`   … Learn is busy (${e.message}) — retrying in 30 s`); await new Promise((r) => setTimeout(r, 30_000)); }
+        else { log(`   ! skipped ${rel} for now (Learn did not answer) — it is retried on the next run`); delete s.done[rel]; save(); }
+      }
+    }
+    if (!request && !s.done[rel]) continue;
     if (!request) { save(); continue; }
     appendJsonl(out, { messages: [{ role: 'user', content: request }, { role: 'assistant', content: answer }], source: src.source || 'open-code', repo, license, path: rel, at: new Date().toISOString() });
     seen.add(h); saved++;
