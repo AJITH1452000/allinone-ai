@@ -39,7 +39,8 @@ const TASK = /^\s*(please\s+|pls\s+|plz\s+|can you\s+|could you\s+|i want( you)?
 // Things people ask the AI to BUILD — never a news search, even without a verb ("portfolio website for me")
 const BUILD_THING = /\b(website|web ?site|web ?page|webpage|landing page|portfolio|resume|cv|app|application|dashboard|component|ui|ux|frontend|front-end|backend|back-end|api|form|login page|signup page|todo|calculator|game|script|program|bot|chatbot|template|layout|navbar|footer|sql query|database schema|project|system|software|tool|portal|platform|tracker|crud|management|admin panel|e-?commerce|store|shop|blog|clone|module|feature|page)\b/i;
 const BUILD_VERB = /\b(build|buld|bulid|biuld|create|creat|make|mak|develop|devlop|design|desgin|code|write|generate|genrate|need|want)\b/i;
-const CREATIVE = /\b(poem|story|kavithai|kadhai|கவிதை|கதை|lyrics|song lyrics|essay|joke|caption|slogan|quote for)\b/i;
+// Ideas / suggestions / brainstorming are the model's own work, not a web lookup ("project ideas", "suggest a final year project")
+const CREATIVE = /\b(ideas?|suggest|suggestions?|brainstorm|recommend\w*|topics? for|names? for|tips|roadmap|poem|story|kavithai|kadhai|கவிதை|கதை|lyrics|song lyrics|essay|joke|caption|slogan|quote for)\b/i;
 const MATH = /^[\d\s+\-*/().^%=x×÷]+$/;
 // Programming / concept questions the model already knows ("explain closures in JavaScript")…
 const CODING = /\b(javascript|typescript|js|ts|python|java|c\+\+|c#|golang|rust|php|kotlin|swift|react|vue|angular|node(\.js)?|express|next\.?js|css|html|sql|mongodb|git|docker|closures?|functions?|arrays?|objects?|class(es)?|loops?|recursion|promises?|async|await|hooks?|props|state|api|algorithms?|data structures?|oop|inheritance|variables?|syntax|regex|big ?o)\b/i;

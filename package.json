@@ -28,7 +28,8 @@
     "deps-report": "node scripts/deps-report.mjs",
     "firewall-lock": "powershell -NoProfile -ExecutionPolicy Bypass -File firewall-lock.ps1",
     "firewall-unlock": "powershell -NoProfile -ExecutionPolicy Bypass -File firewall-unlock.ps1",
-    "firewall-status": "powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1"
+    "firewall-status": "powershell -NoProfile -ExecutionPolicy Bypass -File status.ps1",
+    "learn-autostart": "node tunnel/autostart.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

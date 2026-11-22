@@ -50,22 +50,48 @@ function findCloudflared() {
   return candidates.find((p) => fs.existsSync(p)) || 'cloudflared';
 }
 
-guard.listen(GUARD_PORT, '127.0.0.1', () => {
-  console.log(`\n🛡️  Guard running on http://127.0.0.1:${GUARD_PORT} → Ollama (key required)`);
-  const cf = spawn(findCloudflared(), ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${GUARD_PORT}`], { windowsHide: true });
-  let shown = false;
+// --auto: keep Learn online on the live site by itself — after every (re)start of the tunnel it puts the new address into
+// Vercel (OLLAMA_URL) and redeploys the site; every minute it checks the tunnel and restarts it if it died.
+const AUTO = process.argv.includes('--auto');
+const SITE = process.env.EVOLVIX_SITE || 'evolvix-wheat.vercel.app';
+const ROOT = path.join(dir, '..');
+const log = (m) => console.log(`[${new Date().toLocaleTimeString()}] ${m}`);
+const vercel = (args, input) => new Promise((resolve) => {
+  const p = spawn('npx', ['--yes', 'vercel', ...args], { cwd: ROOT, shell: true, windowsHide: true });
+  let out = '';
+  p.stdout.on('data', (d) => { out += d; }); p.stderr.on('data', (d) => { out += d; });
+  if (input != null) p.stdin.end(input); else p.stdin.end();
+  p.on('close', (code) => resolve({ ok: code === 0, out }));
+});
+async function publish(url) {
+  // wait until the new address answers from the internet (new quick tunnels take a few seconds to resolve)
+  for (let i = 0; i < 30; i++) {
+    try { const r = await fetch(`${url}/api/version`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) }); if (r.ok) break; } catch {}
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  log('updating OLLAMA_URL on Vercel…');
+  const u = await vercel(['env', 'update', 'OLLAMA_URL', '--environment=production', '--yes'], `${url}/v1`);
+  if (!u.ok) { log(`⚠️ could not update Vercel: ${u.out.split('\n').filter((l) => /error|Error/.test(l)).slice(0, 2).join(' ') || 'run "npx vercel login" once on this PC'}`); return; }
+  log(`redeploying ${SITE} with the new address…`);
+  const d = await vercel(['redeploy', SITE, '--environment', 'production']);
+  log(d.ok ? `✅ live site updated — Learn works on https://${SITE}` : `⚠️ redeploy failed: ${d.out.slice(-200)}`);
+}
+
+let cf = null, currentUrl = '', fails = 0;
+function startTunnel() {
+  currentUrl = '';
+  cf = spawn(findCloudflared(), ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${GUARD_PORT}`], { windowsHide: true });
   const onLine = (d) => {
     const url = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(String(d))?.[0];
-    if (url && !shown) {
-      shown = true;
-      console.log(`\n✅ Learn is online at ${url}\n`);
-      console.log('In Vercel → your project → Settings → Environment Variables, set (then Redeploy):');
-      console.log(`   OLLAMA_URL      = ${url}/v1`);
-      console.log(`   OLLAMA_API_KEY  = ${token}`);
-      console.log('\nKeep this window open — Learn works on the live site only while it runs and this PC is on.');
-      console.log('Note: a free quick tunnel gets a NEW address every time it starts → update OLLAMA_URL in Vercel after each restart.');
-      console.log('(The key stays the same. For a fixed address, use a named Cloudflare tunnel or an ngrok static domain to port 11435.)\n');
-    }
+    if (!url || currentUrl) return;
+    currentUrl = url; fails = 0;
+    console.log(`\n✅ Learn is online at ${url}\n`);
+    if (AUTO) { publish(url); return; }
+    console.log('In Vercel → your project → Settings → Environment Variables, set (then Redeploy):');
+    console.log(`   OLLAMA_URL      = ${url}/v1`);
+    console.log(`   OLLAMA_API_KEY  = ${token}`);
+    console.log('\nKeep this window open — Learn works on the live site only while it runs and this PC is on.');
+    console.log('Tip: npm run learn-online -- --auto  updates Vercel by itself; npm run learn-autostart starts it with Windows.\n');
   };
   cf.stdout.on('data', onLine);
   cf.stderr.on('data', onLine);
@@ -75,8 +101,26 @@ guard.listen(GUARD_PORT, '127.0.0.1', () => {
     console.log(`\n   The guard keeps running on port ${GUARD_PORT}; any tunnel (ngrok, Cloudflare) pointing at it works.`);
     console.log(`   Vercel needs: OLLAMA_URL = <your tunnel address>/v1   and   OLLAMA_API_KEY = ${token}\n`);
   });
-  cf.on('exit', (code) => { if (shown) { console.log(`Tunnel stopped (code ${code}).`); process.exit(code || 0); } });
-  const stop = () => { cf.kill(); guard.close(); process.exit(0); };
+  cf.on('exit', (code) => {
+    if (!AUTO) { console.log(`Tunnel stopped (code ${code}).`); process.exit(code || 0); }
+    log(`tunnel stopped (code ${code}) — restarting in 10 s`);
+    setTimeout(startTunnel, 10_000);
+  });
+}
+
+guard.listen(GUARD_PORT, '127.0.0.1', () => {
+  console.log(`\n🛡️  Guard running on http://127.0.0.1:${GUARD_PORT} → Ollama (key required)${AUTO ? ' · auto mode' : ''}`);
+  startTunnel();
+  // Auto mode watchdog: the address must answer from the internet; 3 misses in a row → new tunnel (→ Vercel updated again)
+  if (AUTO) setInterval(async () => {
+    if (!currentUrl) return;
+    try {
+      const r = await fetch(`${currentUrl}/api/version`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000) });
+      fails = r.ok ? 0 : fails + 1;
+    } catch { fails++; }
+    if (fails >= 3) { log('tunnel not reachable — starting a new one'); fails = 0; try { cf.kill(); } catch {} }
+  }, 60_000);
+  const stop = () => { try { cf.removeAllListeners('exit'); cf.kill(); } catch {} guard.close(); process.exit(0); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
 });
 guard.on('error', (e) => { console.error(`Could not start the guard on port ${GUARD_PORT}: ${e.message}`); process.exit(1); });

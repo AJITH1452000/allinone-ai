@@ -19,3 +19,4 @@ tunnel/.site-password
 
 # Encrypted backups (npm run backup) — never commit or upload
 backups/
+tunnel/learn-online.log

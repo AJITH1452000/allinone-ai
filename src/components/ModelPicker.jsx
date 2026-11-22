@@ -233,11 +233,14 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
   useEffect(() => { if (open) { loadProviders(); onRefresh(); setTimeout(() => searchRef.current?.focus(), 50); } }, [open]); // eslint-disable-line
 
   const providerIds = useMemo(() => [...new Set(models.map((m) => m.provider))], [models]);
+  // Learn not reachable (live site while your PC is off) → show the other models automatically, so the app still works
+  const ownAvailable = models.some((m) => m.own && !m.hidden);
+  const showOthers = showAll || !ownAvailable;
   const list = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     return models.filter((m) => {
       if (m.hidden) return false; // learn-vision / learn-max: used automatically or via the ⚡/🧠 switch
-      if (!showAll && !m.own) return false;
+      if (!showOthers && !m.own) return false;
       if (freeOnly && !m.free) return false;
       if (filter === 'free' && !m.free) return false;
       if (filter === 'fast' && !m.fast) return false;
@@ -246,7 +249,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
       const hay = `${m.id} ${m.providerName}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-  }, [models, q, filter, freeOnly, showAll]);
+  }, [models, q, filter, freeOnly, showOthers]);
 
   // Your own Learn models always stay on top, whatever filter is chosen (only the search box narrows them)
   const ownList = models.filter((m) => m.own && !m.hidden && q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => `${m.id} ${m.label}`.toLowerCase().includes(w)));
@@ -317,7 +320,9 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                   ))}
                   {!ownList.length && !q && (
                     <Typography sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: 'text.secondary' }}>
-                      Not built yet — run <code>npm run build-models</code>, then press reload ↻.
+                      {window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                        ? <>Not built yet — run <code>npm run build-models</code>, then press reload ↻.</>
+                        : <>Learn runs on your PC, and your PC isn't reachable right now (it must be on, with Learn online running). Use a free model below meanwhile, then press reload ↻.</>}
                     </Typography>
                   )}
                 </>
@@ -369,7 +374,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                   ))}
                 </Box>
               ))}
-              {!otherList.length && showAll && (
+              {!otherList.length && showOthers && (
                 <Box sx={{ textAlign: 'center', py: 6, px: 3 }}>
                   <Typography sx={{ fontWeight: 600, mb: 0.5 }}>{models.length ? 'No matching models' : 'No models yet'}</Typography>
                   <Typography sx={{ fontSize: 13.5, color: 'text.secondary', mb: 2 }}>
@@ -378,7 +383,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                   <Button variant="contained" disableElevation onClick={() => setTab(1)} sx={{ borderRadius: 2 }}>Connect providers</Button>
                 </Box>
               )}
-              {showAll && !!list.length && models.length < 10 && (
+              {showOthers && !!list.length && models.length < 10 && (
                 <ButtonBase onClick={() => setTab(1)} sx={{ width: '100%', mt: 1, p: 1.5, borderRadius: 2, border: 1, borderStyle: 'dashed', borderColor: 'divider', color: 'text.secondary', fontSize: 13.5 }}>
                   + Add Google Gemini, Claude, OpenRouter (300+ models)…
                 </ButtonBase>
