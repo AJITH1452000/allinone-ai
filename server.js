@@ -974,6 +974,13 @@ After the last file: at most 3 short lines (how to run).)` }];
     messages: system ? [{ role: 'system', content: system }, ...msgs] : msgs,
   };
   if (temperature != null) body.temperature = Number(temperature);
+  // Accuracy first on your own Learn models: code / technical answers never use high "creativity" (random words = wrong code).
+  // Code, bugs, projects, packages → 0.2; other questions → at most 0.6. The slider still applies to chat and writing.
+  if (ownLearn) {
+    const codeLike = projectMode || level === 'medium' || /```|\b(code|function|error|bug|install|command|syntax)\b/i.test(lastText);
+    const cap = codeLike ? 0.2 : 0.6;
+    if (!(/\b(poem|story|lyrics|kavithai|kadhai|creative|joke|slogan|caption)\b/i.test(lastText))) body.temperature = Math.min(body.temperature ?? cap, cap);
+  }
   if (maxTokens) body.max_tokens = Number(maxTokens);
   // A whole project, or a "Fix with AI" reply with several full files, needs room
   if (projectMode || /live preview of the project shows these errors/i.test(lastText)) body.max_tokens = Math.max(Number(maxTokens) || 0, 8192);

@@ -3,10 +3,12 @@
 // The answer is always the REAL human-written file; local Learn only writes the one-line request.
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import * as kb from '../kb.js';
 import { sparseClone, readLicense, licenseOf, walk, looksBinary, SECRET, requestFor, asFile, appendJsonl, readJsonl, hash, state, gitIn } from './lib.mjs';
+const HERE_DIR = path.dirname(fileURLToPath(import.meta.url)); // decodes spaces ("MY WORKS")
 
-export const loadSources = () => JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'sources.json'), 'utf8')).sources;
+export const loadSources = () => JSON.parse(fs.readFileSync(path.join(HERE_DIR, 'sources.json'), 'utf8')).sources;
 
 /** Clone → licence check → each demo/template file becomes { request (by Learn) → real file } and a "docs" reference. */
 export async function processRepo(src, { limit = 0, toKb = true, log = console.log } = {}) {
@@ -52,7 +54,7 @@ export async function processRepo(src, { limit = 0, toKb = true, log = console.l
 
 /** Bug-fix pairs from history: last 300 commits touching one .jsx/.tsx file, message like fix/bug/crash/error/broken, ≤ 60 changed lines */
 export function fixesFromHistory(src, { log = console.log, max = 300 } = {}) {
-  const dir = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'data', 'open-code', src.repo.replace('/', '__'));
+  const dir = path.join(HERE_DIR, '..', 'data', 'open-code', src.repo.replace('/', '__'));
   if (!fs.existsSync(dir)) return { repo: src.repo, fixes: 0 };
   const license = licenseOf(readLicense(dir));
   if (!license) return { repo: src.repo, fixes: 0 };
