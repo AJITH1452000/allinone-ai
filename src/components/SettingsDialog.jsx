@@ -125,7 +125,7 @@ function Row({ title, desc, children, column }) {
         <Typography sx={{ fontSize: 14, fontWeight: 500 }}>{title}</Typography>
         {desc && <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mt: 0.25 }}>{desc}</Typography>}
       </Box>
-      <Box sx={{ flexShrink: 0 }}>{children}</Box>
+      <Box sx={{ flexShrink: 0, ...(column ? { width: '100%' } : {}) }}>{children}</Box>
     </Box>
   );
 }
@@ -288,15 +288,15 @@ export default function SettingsDialog({ open, onClose, tab: initialTab = 'gener
         </Row>
         <Row column title={`Creativity: ${settings.temperature}`} desc="Lower = precise and consistent. Higher = more creative.">
           <Slider min={0} max={1.5} step={0.1} value={settings.temperature} onChange={(_, v) => set('temperature', v)}
-            marks={[{ value: 0, label: 'Precise' }, { value: 0.7, label: 'Balanced' }, { value: 1.5, label: 'Creative' }]} sx={{ mx: 1, width: 'auto' }} />
+            marks={[{ value: 0, label: 'Precise' }, { value: 0.7, label: 'Balanced' }, { value: 1.5, label: 'Creative' }]} sx={{ mx: 1, width: 'calc(100% - 16px)' }} />
         </Row>
         <Row column title={`Max reply length: ${settings.maxTokens} tokens`} desc="Caps how long one answer can be.">
           <Slider min={512} max={8192} step={256} value={settings.maxTokens} onChange={(_, v) => set('maxTokens', v)}
-            marks={[{ value: 1024, label: 'Short' }, { value: 2048, label: 'Normal' }, { value: 8192, label: 'Long code' }]} sx={{ mx: 1, width: 'auto' }} />
+            marks={[{ value: 1024, label: 'Short' }, { value: 2048, label: 'Normal' }, { value: 8192, label: 'Long code' }]} sx={{ mx: 1, width: 'calc(100% - 16px)' }} />
         </Row>
         <Row column title={`Chat memory: last ${settings.memory} messages`} desc="Only these recent messages are sent each time. Old images, files and code are trimmed automatically.">
           <Slider min={2} max={40} step={2} value={settings.memory} onChange={(_, v) => set('memory', v)}
-            marks={[{ value: 4, label: 'Cheap' }, { value: 10, label: 'Balanced' }, { value: 40, label: 'Full' }]} sx={{ mx: 1, width: 'auto' }} />
+            marks={[{ value: 4, label: 'Cheap' }, { value: 10, label: 'Balanced' }, { value: 40, label: 'Full' }]} sx={{ mx: 1, width: 'calc(100% - 16px)' }} />
         </Row>
         <Row title="Short answers" desc="Asks the model to skip filler — uses fewer tokens.">
           <Switch checked={!!settings.concise} onChange={(e) => set('concise', e.target.checked)} />
