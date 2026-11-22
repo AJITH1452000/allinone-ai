@@ -133,7 +133,7 @@ export default function Composer({ onSend, onStop, streaming, settings, setSetti
           if (send) { e.preventDefault(); submit(); }
         }}
         minRows={2} InputProps={{ disableUnderline: true, sx: { fontSize: 15.5, px: 0.75, py: 0.75, lineHeight: 1.5 } }} />
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap', rowGap: 0.75 }}>
         <input ref={fileRef} type="file" multiple hidden
           accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.js,.jsx,.ts,.tsx,.json,.css,.html,.py,.java,.c,.cpp,.csv,.xml,.yml,.yaml,.sql,.env,.log"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
