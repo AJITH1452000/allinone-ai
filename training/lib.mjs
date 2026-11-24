@@ -95,10 +95,11 @@ export const looksBinary = (s) => /\u0000/.test(s.slice(0, 2000));
 export async function requestFor(code, filePath, { model = 'learn' } = {}) {
   const r = await fetch(`${OLLAMA}/api/chat`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {}) },
-    signal: AbortSignal.timeout(90_000),
-    body: JSON.stringify({ model, stream: false, think: false, options: { num_predict: 60, temperature: 0.3 }, messages: [{ role: 'user', content:
-      `Here is a file (${filePath}):\n\n${code.slice(0, 6000)}\n\nWrite ONE short request (max 25 words) that a developer would type to get exactly this file, e.g. "Create a MUI sidebar with collapsible menu groups". Reply with the request only. /no_think` }] }),
+    signal: AbortSignal.timeout(300_000),
+    body: JSON.stringify({ model, stream: false, think: false, options: { num_ctx: 2048, num_predict: 60, temperature: 0.3 }, messages: [{ role: 'user', content:
+      `Here is a file (${filePath}):\n\n${code.slice(0, 2500)}\n\nWrite ONE short request (max 25 words) that a developer would type to get exactly this file, e.g. "Create a MUI sidebar with collapsible menu groups". Reply with the request only. /no_think` }] }),
   });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json();
   return noThink(j.message?.content).split('\n').map((l) => l.trim()).find(Boolean)?.replace(/^["'`]|["'`]$/g, '').slice(0, 300) || '';
 }

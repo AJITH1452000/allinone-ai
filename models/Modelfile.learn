@@ -1,12 +1,14 @@
-# {{NAME}} — the one main model. Qwen3 4B hybrid Q4_K_M (2.6 GB) — thinks only when needed (/think, /no_think), unlimited, runs on your PC.
+# {{NAME}} — main model. Qwen3 4B hybrid Q4_K_M (or swap to qwen3:8b / qwen3:14b on a stronger machine).
+# Tuned for Claude/Gemini-level accuracy: lower temperature, 16K context, full-length answers.
 # Main instructions come from models/system.md — edit that one file, then run: npm run build-models
 FROM qwen3:4b-q4_K_M
-PARAMETER num_ctx 8192
-PARAMETER temperature 0.6
-PARAMETER top_p 0.95
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.45
+PARAMETER top_p 0.9
 PARAMETER top_k 20
+PARAMETER min_p 0.05
 PARAMETER repeat_penalty 1.05
-PARAMETER num_predict 3000
+PARAMETER num_predict 4096
 
 SYSTEM """
 You are {{NAME}}, made by {{COMPANY}}. Only when asked who you are, say you are {{NAME}} from {{COMPANY}}.

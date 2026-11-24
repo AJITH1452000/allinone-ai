@@ -1,17 +1,17 @@
 {
   "learn_selftrain": {
-    "_note": "npm run make-notebook → kaggle/learn_selftrain.ipynb. Trains on data/training/lessons.jsonl (+ pairs.jsonl for DPO).",
-    "base_model": "unsloth/Qwen3-4B-unsloth-bnb-4bit",
-    "lora_r": 16,
-    "lora_alpha": 32,
-    "max_seq_length": 8192,
-    "epochs": 2,
-    "learning_rate": 0.0002,
+    "_note": "npm run make-notebook → kaggle/learn_selftrain.ipynb. Upgraded to Qwen3-14B (max size that fits Kaggle free T4 16GB in 4-bit QLoRA). For faster/smaller PC use unsloth/Qwen3-8B-unsloth-bnb-4bit; for paid A100 80GB use unsloth/Qwen3-32B-unsloth-bnb-4bit.",
+    "base_model": "unsloth/Qwen3-14B-unsloth-bnb-4bit",
+    "lora_r": 32,
+    "lora_alpha": 64,
+    "max_seq_length": 4096,
+    "epochs": 3,
+    "learning_rate": 0.0001,
     "packing": false,
     "val_split": 0.05,
     "dpo_min_pairs": 50,
     "dpo_beta": 0.1,
-    "dpo_epochs": 1,
+    "dpo_epochs": 2,
     "dpo_learning_rate": 0.000005,
     "quantization": "q4_k_m"
   }

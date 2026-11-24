@@ -1,10 +1,11 @@
 FROM qwen2.5-coder:7b
 
-# Exact Claude/Gemini style directness (low temperature = zero fluff)
-PARAMETER temperature 0.2
+# Exact Claude/Gemini style directness & precision (low temperature, 16K context, full files)
+PARAMETER temperature 0.15
 PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.1
-PARAMETER num_ctx 8192
+PARAMETER repeat_penalty 1.08
+PARAMETER num_ctx 16384
+PARAMETER num_predict 6144
 
 SYSTEM """
 You are a direct, elite coding and technical AI assistant.

@@ -24,11 +24,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Every provider below speaks the OpenAI-compatible chat API, so one code path serves all.
 // env = the .env variable; keys pasted in the app UI are saved to keys.json and take priority.
+const normalizeOllamaBase = (u) => {
+  const clean = String(u || '').trim().replace(/\/+$/, '');
+  if (!clean) return 'http://localhost:11434/v1';
+  return /\/v1$/i.test(clean) ? clean : `${clean}/v1`;
+};
+
 const PROVIDERS = {
   // Keyless free provider — works with zero setup. Set POLLINATIONS=off in .env to hide it.
   pollinations: { name: 'Pollinations', tag: 'Free · no key', base: 'https://text.pollinations.ai/openai',
                   modelsUrl: 'https://text.pollinations.ai/models', builtin: true, allFree: true },
-  ollama:     { name: 'Ollama (local)', tag: 'Free · unlimited', base: process.env.OLLAMA_URL || 'http://localhost:11434/v1', builtin: true, allFree: true, url: 'https://ollama.com/download' },
+  ollama:     { name: 'Ollama (local)', tag: 'Free · unlimited', base: normalizeOllamaBase(process.env.OLLAMA_URL), builtin: true, allFree: true, url: 'https://ollama.com/download' },
   gemini:     { name: 'Google Gemini', tag: 'Free tier', env: 'GEMINI_API_KEY', base: 'https://generativelanguage.googleapis.com/v1beta/openai', allFree: true, url: 'https://aistudio.google.com/apikey' },
   anthropic:  { name: 'Anthropic Claude', tag: 'Paid', env: 'ANTHROPIC_API_KEY', base: 'https://api.anthropic.com/v1', url: 'https://console.anthropic.com/settings/keys' },
   openrouter: { name: 'OpenRouter', tag: '300+ models · many free', env: 'OPENROUTER_API_KEY', base: 'https://openrouter.ai/api/v1', url: 'https://openrouter.ai/keys' },
@@ -82,12 +88,14 @@ function loadFamily() {
   // Default own model: learn, or learn-codeplus once the exam showed it scores higher (training/compare.mjs writes this file)
   try { DEFAULT_OWN = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'default-model.json'), 'utf8')).model || f; } catch { DEFAULT_OWN = f; }
   OWN = {
-    [`${f}-code`]: { label: `${FAMILY.name} Code`, desc: 'Direct coder · Qwen2.5-Coder 7B · code first, no fluff', rank: 2, vision: false, fast: false },
-    [f]: { label: FAMILY.name, desc: 'Thinks first · codes · unlimited · on your PC', rank: 1, vision: true, fast: true },
-    [`${f}-vision`]: { label: `${FAMILY.name} Vision`, desc: 'Reads images', rank: 2, vision: true, fast: false, hidden: true }, // used automatically for images
-    [`${f}-max`]: { label: `${FAMILY.name} Max`, desc: 'Bigger brain for hard problems · slower', rank: 3, vision: false, fast: false, hidden: true }, // message box → 🧠 Max quality
-    [`${f}-32k`]: { label: `${FAMILY.name} 32K`, desc: 'Long window · only for Claude Code (claude-local.cmd)', rank: 4, vision: false, fast: false, hidden: true },
     [`${f}-codeplus`]: { label: `${FAMILY.name} Code+`, desc: 'Your fine-tuned Learn · trained on your verified work', rank: 0, vision: false, fast: false },
+    [f]: { label: FAMILY.name, desc: 'Thinks first · codes · unlimited · on your PC', rank: 1, vision: true, fast: true },
+    [`${f}-code`]: { label: `${FAMILY.name} Code`, desc: 'Direct coder · Qwen2.5-Coder · code first, no fluff', rank: 2, vision: false, fast: false },
+    [`${f}-pro`]: { label: `${FAMILY.name} Pro`, desc: 'Balanced · everyday · on your PC', rank: 3, vision: true, fast: false },
+    [`${f}-lite`]: { label: `${FAMILY.name} Lite`, desc: 'Fastest · quick answers · on your PC', rank: 4, vision: false, fast: true },
+    [`${f}-vision`]: { label: `${FAMILY.name} Vision`, desc: 'Reads images', rank: 5, vision: true, fast: false, hidden: true }, // used automatically for images
+    [`${f}-max`]: { label: `${FAMILY.name} Max`, desc: 'Bigger brain for hard problems · slower', rank: 6, vision: false, fast: false, hidden: true }, // message box → 🧠 Max quality
+    [`${f}-32k`]: { label: `${FAMILY.name} 32K`, desc: 'Long window · only for Claude Code (claude-local.cmd)', rank: 7, vision: false, fast: false, hidden: true },
   };
 }
 loadFamily();
@@ -96,7 +104,8 @@ const SKIP =/embed|whisper|tts|dall-e|image|moderation|audio|transcribe|realtime
 async function listModels(id, status) {
   const p = PROVIDERS[id];
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), id === 'ollama' ? 2500 : 8000);
+  const isLocalOllama = id === 'ollama' && /localhost|127\.0\.0\.1/i.test(p.base);
+  const timer = setTimeout(() => ctrl.abort(), isLocalOllama ? 2500 : 8000);
   try {
     if (p.staticModels) {
       const list = p.staticModels.map((mid) => ({ provider: id, providerName: p.name, id: mid, label: mid, free: !!p.allFree, fast: false, vision: false }));

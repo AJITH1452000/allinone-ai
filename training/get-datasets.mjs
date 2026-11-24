@@ -24,12 +24,13 @@ async function commitpack() {
   const card = await (await fetch(`https://huggingface.co/datasets/${DS}/raw/main/README.md`, { signal: AbortSignal.timeout(30_000) })).text().catch(() => '');
   if (!card) return table.push(['commitpackft', 0, '?', 'could not read the dataset card']);
   if (AI_MADE.test(card)) return table.push(['commitpackft', 0, '-', 'dataset card says it was AI-generated → skipped']);
-  const MAX = 3000;
+  const MAX = 8000;
   const out = 'commitpack.jsonl';
   const seen = new Set(readJsonl(out).map((r) => hash(r.messages[1].content)));
   let total = seen.size, saved = 0;
   const { s, save } = state('commitpackft');
-  for (const lang of ['javascript', 'typescript']) {
+  for (const lang of ['javascript', 'typescript', 'python']) {
+    const fence = lang === 'python' ? 'python' : lang === 'typescript' ? 'tsx' : 'jsx';
     const url = `https://huggingface.co/datasets/${DS}/resolve/main/data/${lang}/data.jsonl`;
     let offset = s[lang] || 0;
     if (s[`${lang}_done`]) continue;
@@ -46,16 +47,15 @@ async function commitpack() {
         offset += Buffer.byteLength(line, 'utf8') + 1; scanned++;
         let row; try { row = JSON.parse(line); } catch { continue; }
         const oldC = row.old_contents || '', newC = row.new_contents || '';
-        if (!/react|@mui|jsx/i.test(oldC + newC)) continue;
-        if (!/fix|bug|error|crash|broken|wrong|issue/i.test(row.subject || '')) continue;
-        if (!oldC.trim() || !newC.trim() || oldC.length > 6000 || newC.length > 6000 || oldC === newC) continue;
+        if (!/fix|bug|error|crash|broken|wrong|issue|refactor|handle|validate|check/i.test(row.subject || '')) continue;
+        if (!oldC.trim() || !newC.trim() || oldC.length < 40 || oldC.length > 6000 || newC.length > 6000 || oldC === newC) continue;
         if (!PERMISSIVE_IDS.test(String(row.license || ''))) continue;
         if (SECRET_WORDS.test(oldC + newC)) continue;
-        const assistant = `${row.subject} — fixed:\n\n\`\`\`jsx\n${newC.trimEnd()}\n\`\`\``;
+        const assistant = `${row.subject} — fixed:\n\n\`\`\`${fence}\n${newC.trimEnd()}\n\`\`\``;
         const h = hash(assistant);
         if (seen.has(h)) continue;
         seen.add(h);
-        appendJsonl(out, { messages: [{ role: 'user', content: `Fix this bug: ${row.subject}\n\n\`\`\`jsx\n${oldC.trimEnd()}\n\`\`\`` }, { role: 'assistant', content: assistant }],
+        appendJsonl(out, { messages: [{ role: 'user', content: `Fix this bug: ${row.subject}\n\n\`\`\`${fence}\n${oldC.trimEnd()}\n\`\`\`` }, { role: 'assistant', content: assistant }],
           source: 'commitpackft', repo: row.repos, license: row.license, path: row.new_file, commit: row.commit });
         saved++; total++;
         if (saved % 25 === 0) process.stdout.write(`   ${lang}: scanned ${scanned} · saved ${saved}\n`);

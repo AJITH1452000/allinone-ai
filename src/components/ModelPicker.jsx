@@ -315,11 +315,28 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
                     <ModelRow key={`${m.provider}:${m.id}`} m={m} onPick={pick}
                       active={value && value.provider === m.provider && value.id === m.id} />
                   ))}
-                  {!ownList.length && !q && (
-                    <Typography sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: 'text.secondary' }}>
-                      Not built yet — run <code>npm run build-models</code>, then press reload ↻.
-                    </Typography>
-                  )}
+                  {!ownList.length && !q && (() => {
+                    const ol = status.find((s) => s.id === 'ollama');
+                    if (ol && !ol.ok) {
+                      return (
+                        <Typography sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: 'error.main' }}>
+                          Ollama error: {ol.error}
+                        </Typography>
+                      );
+                    }
+                    if (!ol) {
+                      return (
+                        <Typography sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: 'text.secondary' }}>
+                          Ollama is not connected on this server. Run <code>npm run learn-online</code> on your PC and set <code>OLLAMA_URL</code> &amp; <code>OLLAMA_API_KEY</code> in Vercel, then redeploy.
+                        </Typography>
+                      );
+                    }
+                    return (
+                      <Typography sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: 'text.secondary' }}>
+                        Not built yet — run <code>npm run build-models</code>, then press reload ↻.
+                      </Typography>
+                    );
+                  })()}
                 </>
               )}
 
@@ -391,7 +408,7 @@ export default function ModelPicker({ models, value, onChange, freeOnly, loading
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
               Keys are tested, then saved only on this computer (keys.json next to server.js). Models appear instantly — no restart.
             </Typography>
-            {status.filter((s) => !s.ok && s.id !== 'ollama').map((s) => (
+            {status.filter((s) => !s.ok && (s.id !== 'ollama' || s.error !== 'not running')).map((s) => (
               <Typography key={s.id} sx={{ fontSize: 12.5, color: 'error.main' }}>{s.name}: {s.error}</Typography>
             ))}
             {[...providers].sort((a, b) => (FREE_KEYS.findIndex((k) => k.id === a.id) + 1 || 99) - (FREE_KEYS.findIndex((k) => k.id === b.id) + 1 || 99))

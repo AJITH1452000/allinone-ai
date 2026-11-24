@@ -1,12 +1,13 @@
-# {{NAME}} Max — Qwen3 8B (5.2 GB, partly on CPU on a 4 GB GPU: slower). For hard problems: message box → 🧠 Max quality.
+# {{NAME}} Max — Qwen3 14B (~9 GB, best on 16 GB+ RAM / GPU server). High accuracy + deep reasoning: message box → 🧠 Max quality.
 # Main instructions come from models/system.md — edit that one file, then run: npm run build-models
-FROM qwen3:8b
-PARAMETER num_ctx 8192
-PARAMETER temperature 0.6
-PARAMETER top_p 0.95
+FROM qwen3:14b
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.4
+PARAMETER top_p 0.9
 PARAMETER top_k 20
+PARAMETER min_p 0.05
 PARAMETER repeat_penalty 1.05
-PARAMETER num_predict 3000
+PARAMETER num_predict 6144
 
 SYSTEM """
 You are {{NAME}}, made by {{COMPANY}}. Only when asked who you are, say you are {{NAME}} from {{COMPANY}}.

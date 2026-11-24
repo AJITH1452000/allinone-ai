@@ -19,6 +19,7 @@
     "fetch-open-code": "node training/fetch-open-code.mjs",
     "get-datasets": "node training/get-datasets.mjs",
     "clean-data": "node training/clean-data.mjs",
+    "prep-training": "node training/fetch-open-code.mjs && node training/get-datasets.mjs && node training/load-docs.mjs && node training/clean-data.mjs && node training/make-notebook.mjs",
     "compare": "node training/compare.mjs",
     "vendor": "node scripts/vendor.mjs",
     "backup": "node scripts/backup.mjs backup",

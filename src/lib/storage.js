@@ -9,10 +9,10 @@ export const DEFAULT_SETTINGS = {
   personaId: 'default',
   customSystem: '',
   lang: 'auto',
-  temperature: 0.7,
-  maxTokens: 2048,
-  memory: 10,      // how many recent messages are sent with each request
-  concise: true,   // ask the model for short answers
+  temperature: 0.45,
+  maxTokens: 4096,
+  memory: 20,      // how many recent messages are sent with each request
+  concise: false,  // full, accurate answers (Claude/Gemini feel)
   model: null,
   freeOnly: false,
   myModels: [],
@@ -22,10 +22,10 @@ export const DEFAULT_SETTINGS = {
   fontSize: 'default',
   enterToSend: true,
   webSearch: 'auto', // auto = search the web when the question needs fresh facts
-  reasoning: 'balanced', // fast / balanced / expert
+  reasoning: 'balanced', // fast / balanced / expert (expert runs a 2nd verification pass)
   tools: 'auto',     // auto = calculator, date, memory… when the message needs them; off = never
   allowCode: false,  // let the AI run JavaScript in a sandbox (you turn this on)
-  extendedThinking: false, // message box → 🧠 Extended thinking: Learn thinks before every answer
+  extendedThinking: true,  // message box → 🧠 Extended thinking: Learn takes time to think before every answer
   style: 'normal',  // normal / concise / explanatory / formal
   research: false,  // message box → 🔎 Research
   quality: 'fast',  // message box → ⚡ Fast (learn) / 🧠 Max quality (learn-max)

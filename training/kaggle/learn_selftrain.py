@@ -1,7 +1,7 @@
 # %% [markdown]
-# # Evolvix · Learn Code+ from your own verified work (Kaggle, free GPU)
-# Fine-tunes **Qwen3-4B** (Unsloth 4-bit, QLoRA) on the answers *your* Learn model wrote and the app **verified**
-# (`npm run self-train` + the build agent). Output: `learn-codeplus.Q4_K_M.gguf` + a `Modelfile` for Ollama.
+# # Evolvix · Learn Code+ (High-Parameter 14B Pass · Kaggle Free GPU)
+# Fine-tunes **Qwen3-14B** (Unsloth 4-bit QLoRA, r=32, 3 SFT epochs + 2 DPO epochs) on the answers *your* Learn model wrote and the app **verified**
+# (`npm run self-train` + the build agent). Output: `learn-codeplus.Q4_K_M.gguf` (~9 GB) + a `Modelfile` for Ollama.
 #
 # **Before you press "Run all":**
 # 1. On your PC run `npm run clean-data`, then take `data/training/` **train.jsonl** and **train-pairs.jsonl** (or lessons.jsonl + pairs.jsonl).
@@ -117,9 +117,12 @@ else:
     print(f'DPO skipped: {len(pairs)} pairs (needs {CFG["dpo_min_pairs"]}+). Keep running npm run self-train to collect more.')
 
 # %% [markdown]
-# ## ④ Export for Ollama — `.gguf` (Q4_K_M, ~2.5 GB) + Modelfile
+# ## ④ Export for Ollama — `.gguf` (Q4_K_M, ~9 GB for 14B) + Modelfile
 
 # %%
+import gc, torch
+gc.collect()
+if torch.cuda.is_available(): torch.cuda.empty_cache()
 FastLanguageModel.for_inference(model)
 model.save_pretrained_gguf(f'{OUT}/gguf', tokenizer, quantization_method=CFG['quantization'])
 gguf = sorted(glob.glob(f'{OUT}/gguf/*.gguf') + glob.glob(f'{OUT}/*.gguf') + glob.glob('/kaggle/working/*.gguf'), key=os.path.getsize)[-1]
