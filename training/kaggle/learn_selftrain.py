@@ -77,7 +77,7 @@ ds_val = Dataset.from_list([{'text': to_text(m)} for m in val]) if val else None
 kw = dict(output_dir='/kaggle/working/checkpoints', per_device_train_batch_size=1, gradient_accumulation_steps=8,
           num_train_epochs=CFG['epochs'], learning_rate=CFG['learning_rate'], warmup_ratio=0.05, lr_scheduler_type='cosine',
           optim='adamw_8bit', weight_decay=0.01, logging_steps=5, save_strategy='no', report_to='none', seed=42,
-          fp16=not is_bfloat16_supported(), bf16=is_bfloat16_supported(), dataset_text_field='text', packing=False,
+          fp16=not is_bfloat16_supported(), bf16=is_bfloat16_supported(), dataset_text_field='text', packing=CFG.get('packing', True),
           per_device_eval_batch_size=1)
 sig = inspect.signature(SFTConfig.__init__).parameters   # TRL renamed some options between versions
 kw['max_seq_length' if 'max_seq_length' in sig else 'max_length'] = CFG['max_seq_length']

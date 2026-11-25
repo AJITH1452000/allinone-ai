@@ -10,8 +10,8 @@ export const DEFAULT_SETTINGS = {
   customSystem: '',
   lang: 'auto',
   temperature: 0.45,
-  maxTokens: 4096,
-  memory: 20,      // how many recent messages are sent with each request
+  maxTokens: 3000,
+  memory: 12,      // how many recent messages are sent with each request (keeps prompt fast)
   concise: false,  // full, accurate answers (Claude/Gemini feel)
   model: null,
   freeOnly: false,
@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS = {
   reasoning: 'balanced', // fast / balanced / expert (expert runs a 2nd verification pass)
   tools: 'auto',     // auto = calculator, date, memory… when the message needs them; off = never
   allowCode: false,  // let the AI run JavaScript in a sandbox (you turn this on)
-  extendedThinking: true,  // message box → 🧠 Extended thinking: Learn takes time to think before every answer
+  extendedThinking: false, // smart auto-thinking (simple = instant, coding/bugs = brief think)
   style: 'normal',  // normal / concise / explanatory / formal
   research: false,  // message box → 🔎 Research
   quality: 'fast',  // message box → ⚡ Fast (learn) / 🧠 Max quality (learn-max)

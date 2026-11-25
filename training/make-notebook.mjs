@@ -51,4 +51,9 @@ const nb = {
 };
 const out = path.join(dir, 'kaggle', `${which}.ipynb`);
 fs.writeFileSync(out, JSON.stringify(nb, null, 1));
-console.log(`✔ ${path.relative(process.cwd(), out)}  (${cells.length} cells) — upload it at kaggle.com → Create → New Notebook → File → Import Notebook`);
+const colabDir = path.join(dir, 'colab');
+fs.mkdirSync(colabDir, { recursive: true });
+const colabOut = path.join(colabDir, `${which}_colab.ipynb`);
+const colabNb = { ...nb, metadata: { ...nb.metadata, colab: { provenance: [], gpuType: 'T4' }, accelerator: 'GPU' } };
+fs.writeFileSync(colabOut, JSON.stringify(colabNb, null, 1));
+console.log(`✔ ${path.relative(process.cwd(), out)} & ${path.relative(process.cwd(), colabOut)} (${cells.length} cells)`);
