@@ -17,7 +17,7 @@ export const THINK = /<think(?:ing)?>[\s\S]*?(?:<\/think(?:ing)?>|$)/gi;
 export const noThink = (t) => String(t || '').replace(THINK, '').trim();
 // Hidden text the app adds to a message (docs, analysis, tool results) — never part of a training sample
 export const stripHidden = (t) => noThink(t).replace(/\s*\/(no_)?think\s*$/, '')
-  .replace(/\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g, '')
+  .replace(/\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|npm registry results|PyPI (Python) results|Packagist (PHP) results|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g, '')
   .replace(/\s*\/(no_)?think\s*$/, '').trim();
 export const hash = (s) => crypto.createHash('sha1').update(String(s)).digest('hex');
 export const SECRET = /api[_-]?key|secret|password|passwd|token|private[_-]?key/i;

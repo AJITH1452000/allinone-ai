@@ -14,6 +14,7 @@ import { guardInjection, needsTools, runTool, parseTextToolCalls, TOOL_DEFS, REA
 import { checkProject } from './buildcheck.js';
 import { checkCode, codeBlocks, warmCodeCheck } from './codecheck.js';
 import { DEVICE } from './hardware.js';
+import { isLibraryQuestion, ecosystemOf, packageQuery, searchPackages, searchPackagist, verifyPyPI, fmtWeekly } from './npmsearch.js';
 import helmet from 'helmet';
 import https from 'https';
 import os from 'os';
@@ -234,7 +235,8 @@ async function buildModelList() {
 
   // Permanent 24/7 availability: if local/tunnel Ollama is offline (e.g. on Vercel when your PC is off, or before Ollama starts),
   // keep Learn, Learn Code, Learn Vision & Learn Max ALWAYS available using your system.md instructions + best connected cloud backend.
-  const usingCloudFallback = !ownModels.length && cloudModels.length > 0 && !OFFICE;
+  const hasCloudProvider = Object.keys(PROVIDERS).some((id) => id !== 'ollama' && PROVIDERS[id].key);
+  const usingCloudFallback = !ownModels.length && (cloudModels.length > 0 || hasCloudProvider) && !OFFICE;
   if (usingCloudFallback) {
     const f = FAMILY.id;
     ownModels = [f, `${f}-code`, `${f}-vision`, `${f}-max`].map((k) => ({
@@ -259,7 +261,7 @@ async function pickCloudFallback(modelId = '', needVision = false) {
   const freePool = all.filter((m) => m.free && (!needVision || m.vision));
   const pool = freePool.length ? freePool : all.filter((m) => !needVision || m.vision);
   if (!pool.length) {
-    return all.find((m) => m.free) || all[0] || (PROVIDERS.pollinations?.key ? { provider: 'pollinations', id: 'openai' } : null);
+    return all.find((m) => m.free) || all[0] || (PROVIDERS.pollinations?.key ? { provider: 'pollinations', id: 'openai-fast' } : null);
   }
   const isCode = /-code(:|$)/.test(modelId);
   const isMax = /-max(:|$)/.test(modelId);
@@ -592,7 +594,7 @@ app.post('/api/chat', async (req, res) => {
     try {
       const r = await fetch(`${p.base}/chat/completions`, {
         method: 'POST', headers: headersFor(provider), signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(ms)]),
-        body: JSON.stringify({ model, stream: false, temperature, max_tokens: max,
+        body: JSON.stringify({ model, stream: false, temperature, max_tokens: max, ...(ownLearn ? { reasoning_effort: 'none' } : {}),
           messages: [...(system && !bare ? [{ role: 'system', content: system }] : []), ...(history ? msgs.slice(0, -1) : []),
             { role: 'user', content: ownLearn ? `${content} /no_think` : content }] }),
       });
@@ -863,7 +865,7 @@ After the last file: at most 3 short lines (how to run).)` }];
   //   explain code) → brief thinking, 2000 tokens · project → thinking, 8192 tokens · Extended thinking (message box) → always think
   const MEDIUM = /```|\b(package|packages|library|libraries|npm|pip|module|plugin|bug|error|errors|fix|fixed|debug|review|refactor|optimi[sz]e|not working|doesn'?t work|exception|crash|undefined|warning|component|explain (this|the|my) code|write (a|an|the|me)|function (that|to|which))\b/i;
   const level = projectMode ? 'project' : !hasImage && (isBuildRequest(lastText) || MEDIUM.test(lastText) || shortTopic) ? 'medium' : 'simple';
-  let thinkMax = 0;
+  let thinkMax = 0, thinkOff = false; // thinkOff: Ollama thinks by default — switch it off with the API setting (the /no_think text alone is ignored)
   if (ownLearn) {
     // Device-adaptive thinking: GPU / high-end machines think briefly on medium tasks too (~0.5s on GPU for extra accuracy);
     // CPU / low-mid laptops skip forced /think on normal chat & single-file code so streaming begins immediately.
@@ -881,17 +883,46 @@ After the last file: at most 3 short lines (how to run).)` }];
       const hits = await kb.search('docs', lastText, { k: fastDevice ? 4 : 3, budget: ragBudget }).catch(() => []);
       if (hits.length) ref = `\n\n(Reference docs — use them ONLY if they are about what I asked, otherwise ignore them completely:\n${hits.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
+    // "Which package / library…" in ANY stack: the REAL packages from the official registry — never guessed names.
+    //   npm (JavaScript, TypeScript, React, HTML/CSS tools, Tailwind CSS plugins) · PyPI (Python) · Packagist (PHP)
+    const meantLine = '';
+    const libText = lastText;
+    const eco = isLibraryQuestion(libText) ? ecosystemOf(libText) : null;
+    // Only when there is something to look up ("pdf", "excel", "tailwind") — "what is npm" / "what is a library" is a concept question
+    const pkgTopic = eco ? packageQuery(lastText) : '';
+    if (eco && eco !== 'other' && pkgTopic) {
+      const q = packageQuery(meantLine || lastText) || pkgTopic;
+      let pk = [], registry = '', install = '', size = (p) => '';
+      if (eco === 'npm') {
+        pk = await searchPackages(q, { react: /react|view|show|render|component|ui/i.test(libText) }).catch(() => []);
+        registry = 'npm registry'; install = 'npm install'; size = (p) => `${p.name}@${p.version} (${fmtWeekly(p.weekly)} downloads/week)`;
+      } else if (eco === 'packagist') {
+        pk = await searchPackagist(q).catch(() => []);
+        registry = 'Packagist (PHP)'; install = 'composer require'; size = (p) => `${p.name} (${fmtWeekly(p.total)} downloads in total)`;
+      } else {
+        // PyPI has no open search: the model proposes names, PyPI confirms which really exist (with real versions + downloads)
+        const names = await pass(`List 12 real, popular, actively maintained Python packages on PyPI for: ${meantLine || lastText}. Reply with package names only, comma-separated.`, { max: 100, temperature: 0, ms: 20_000, history: false, bare: true });
+        pk = await verifyPyPI(names.split(/[,\n]/).map((n) => n.replace(/[`*\-\d.)\s]+$|^[\s`*\-\d.)]+/g, '').split(/\s/)[0])).catch(() => []);
+        registry = 'PyPI (Python)'; install = 'pip install'; size = (p) => `${p.name} ${p.version} (${fmtWeekly(p.weekly)} downloads/week)`;
+      }
+      if (ctrl.signal.aborted) return res.end();
+      if (pk.length) {
+        send({ t: 'note', v: `📦 Looked up ${registry}: ${pk.length} real packages${q ? ` for “${q}”` : ''}` });
+        ref += `\n\n(${registry} results — REAL, current packages. Recommend ONLY packages from this list: a Markdown table grouped by use case (Package | What it's for), mark the best modern pick, then the exact \`${install}\` command. Never invent package names, never suggest deprecated ones, no tutorial script unless I asked for code:\n${pk.map((p) => `- ${size(p)}: ${p.description}`).join('\n')})`;
+      }
+    }
     // Your own projects (npm run add-my-code) → Learn reuses your patterns and style
     if ((level === 'medium' || level === 'project') && (aboutStack || level === 'project') && !IS_VERCEL) {
       const mine = await kb.search('mycode', lastText, { k: 2, budget: ragBudget }).catch(() => []);
       if (mine.length) ref += `\n\n(My earlier working code — reuse its style ONLY if it is about what I asked, otherwise ignore it:\n${mine.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
     // A bare topic ("php", "redux") → ask explicitly for a tutor-style overview (small models follow a direct ask far better than a rule)
-    const overview = shortTopic ? '\n\n(Give a short overview of this topic like a good tutor: what it is in 1–2 sentences, its key features or main options as bullets, one small complete code example in a code block, and when to use it. Do not ask me questions back.)' : '';
+    const overview = shortTopic && !(eco && pkgTopic) ? '\n\n(Give a short overview of this topic like a senior developer explaining it to a colleague: what it is in 1–2 sentences, its main parts or options, the most useful commands or a small example in a code block, and how it fits a React + Vite workflow. Use natural short headings — never generic labels like "Overview", "Key Features" or "Small Complete Code Example". Do not ask me questions back.)' : '';
     // /think and /no_think are Qwen3 switches — auto-detected from Ollama's model template across all hardware tiers
     const { hybrid } = await modelMeta(model);
     msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${overview}${ref}`))];
     thinkMax = level === 'project' ? 8192 : think ? (fastDevice ? 4096 : 2500) : (fastDevice ? 3000 : 1800);
+    thinkOff = hybrid && !think;
   }
   // Verified Learn answers become training data (your own model's work; <think> and hidden docs/analysis are never saved)
   const saveTextLesson = (answer) => {
@@ -1033,9 +1064,17 @@ After the last file: at most 3 short lines (how to run).)` }];
     messages: system ? [{ role: 'system', content: system }, ...msgs] : msgs,
   };
   if (temperature != null) body.temperature = Number(temperature);
+  // Accuracy first on your own Learn models: code / technical answers never use high "creativity" (random words = wrong code).
+  // Code, bugs, projects, packages → 0.2; other questions → at most 0.6. The slider still applies to chat and writing.
+  if (ownLearn) {
+    const codeLike = projectMode || level === 'medium' || /```|\b(code|function|error|bug|install|command|syntax)\b/i.test(lastText);
+    const cap = codeLike ? 0.2 : 0.6;
+    if (!(/\b(poem|story|lyrics|kavithai|kadhai|creative|joke|slogan|caption)\b/i.test(lastText))) body.temperature = Math.min(body.temperature ?? cap, cap);
+  }
   if (maxTokens) body.max_tokens = Number(maxTokens);
   // A whole project, or a "Fix with AI" reply with several full files, needs room
   if (projectMode || /live preview of the project shows these errors/i.test(lastText)) body.max_tokens = Math.max(Number(maxTokens) || 0, 8192);
+  if (thinkOff) body.reasoning_effort = 'none'; // simple questions: no thinking at all (fast)
   if (thinkMax && !maxTokens) body.max_tokens = Math.max(body.max_tokens || 0, thinkMax); // think-level budget (Learn)
   if (provider === 'anthropic' && !body.max_tokens) body.max_tokens = 8192;
   // Ask for exact token counts where the provider supports it (others are estimated)
@@ -1179,7 +1218,7 @@ app.get('/api/training/export', (req, res) => {
 // ---------- Feedback = training data (👍 good · 👎 bad · ✏️ corrected) — ONLY for answers from your local Learn models ----------
 const TRAIN_DIR = path.join(__dirname, 'data', 'training');
 const appendTrain = (name, row) => { fs.mkdirSync(TRAIN_DIR, { recursive: true }); fs.appendFileSync(path.join(TRAIN_DIR, name), JSON.stringify(row) + '\n'); };
-const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
+const HIDDEN_RE = /\n*\((Reference docs|My earlier working code|Your analysis|Earlier in this chat|Tool results|Think briefly|Think step by step|Give a short overview|I mean|npm registry results|PyPI (Python) results|Packagist (PHP) results|Reply mode|Style|Data file attached|Research mode)[\s\S]*?\)\s*(?=\n\n|$)/g;
 const cleanForTraining = (t) => noThink(t).replace(/\s*\/(no_)?think\s*$/, '').replace(HIDDEN_RE, '').trim();
 app.post('/api/feedback', (req, res) => {
   const { chatId, messageId, model = '', provider = '', prompt = [], answer = '', rating, corrected = '', note = '' } = req.body || {};

@@ -6,9 +6,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as kb from '../kb.js';
 import { sparseClone, readLicense, licenseOf, walk, looksBinary, SECRET, requestFor, asFile, appendJsonl, readJsonl, hash, state, gitIn } from './lib.mjs';
+const HERE_DIR = path.dirname(fileURLToPath(import.meta.url)); // decodes spaces ("MY WORKS")
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const loadSources = () => JSON.parse(fs.readFileSync(path.join(HERE, 'sources.json'), 'utf8')).sources;
+export const loadSources = () => JSON.parse(fs.readFileSync(path.join(HERE_DIR, 'sources.json'), 'utf8')).sources;
 
 /** Clone → licence check → each demo/template file becomes { request (by Learn) → real file } and a "docs" reference. */
 export async function processRepo(src, { limit = 0, toKb = true, log = console.log } = {}) {
@@ -41,7 +41,14 @@ export async function processRepo(src, { limit = 0, toKb = true, log = console.l
     const h = hash(answer);
     if (seen.has(h)) { save(); continue; }
     let request = '';
-    try { request = await requestFor(code, rel); } catch (e) { log(`   ! Learn did not answer (${e.message}) — is Ollama running with "learn"?`); delete s.done[rel]; save(); break; }
+    // Learn busy (answering a chat, loading a model)? wait and retry once; still nothing → skip this file (retried next run)
+    for (let attempt = 0; attempt < 2 && !request; attempt++) {
+      try { request = await requestFor(code, rel); } catch (e) {
+        if (attempt === 0) { log(`   … Learn is busy (${e.message}) — retrying in 30 s`); await new Promise((r) => setTimeout(r, 30_000)); }
+        else { log(`   ! skipped ${rel} for now (Learn did not answer) — it is retried on the next run`); delete s.done[rel]; save(); }
+      }
+    }
+    if (!request && !s.done[rel]) continue;
     if (!request) { save(); continue; }
     appendJsonl(out, { messages: [{ role: 'user', content: request }, { role: 'assistant', content: answer }], source: src.source || 'open-code', repo, license, path: rel, at: new Date().toISOString() });
     seen.add(h); saved++;
@@ -54,7 +61,7 @@ export async function processRepo(src, { limit = 0, toKb = true, log = console.l
 
 /** Bug-fix pairs from history: last 300 commits touching one .jsx/.tsx file, message like fix/bug/crash/error/broken, ≤ 60 changed lines */
 export function fixesFromHistory(src, { log = console.log, max = 300 } = {}) {
-  const dir = path.join(HERE, '..', 'data', 'open-code', src.repo.replace('/', '__'));
+  const dir = path.join(HERE_DIR, '..', 'data', 'open-code', src.repo.replace('/', '__'));
   if (!fs.existsSync(dir)) return { repo: src.repo, fixes: 0 };
   const license = licenseOf(readLicense(dir));
   if (!license) return { repo: src.repo, fixes: 0 };
