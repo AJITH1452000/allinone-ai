@@ -1,11 +1,12 @@
-FROM qwen2.5-coder:7b
+FROM qwen2.5-coder:3b
 
-# Exact Claude/Gemini style directness & precision (low temperature, fast 8K context, full files)
+# Fast & precise on CPU (1.9 GB fits in RAM without swap, 4 physical threads, low temperature)
 PARAMETER temperature 0.15
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.08
-PARAMETER num_ctx 8192
-PARAMETER num_predict 4096
+PARAMETER num_ctx 4096
+PARAMETER num_thread 4
+PARAMETER num_predict 3000
 
 SYSTEM """
 You are a direct, elite coding and technical AI assistant.

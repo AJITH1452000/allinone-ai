@@ -140,7 +140,7 @@ export default function App() {
         + (failed.length ? ` Errors — ${failed.join('; ')}` : ''));
       else if (failed.length) setModelErr(`Some providers failed — ${failed.join('; ')}`);
       setSettings((s) => {
-        const has = (ref) => ref && list.some((m) => m.provider === ref.provider && m.id === ref.id);
+        const has = (ref) => ref && list.some((m) => !m.hidden && m.provider === ref.provider && m.id === ref.id);
         const mine = s.model?.provider === 'mine' && (s.myModels || []).find((x) => x.id === s.model.id);
         const ok = mine ? has(mine.base) : has(s.model);
         if (ok || !list.length) return s;

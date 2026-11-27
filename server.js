@@ -13,6 +13,7 @@ import { webSearch, needsSearch, withResults, resolveShort, shortUrl, isBuildReq
 import { guardInjection, needsTools, runTool, parseTextToolCalls, TOOL_DEFS, REASONING, verifyMessages, HAS_PYTHON } from './engines.js';
 import { checkProject } from './buildcheck.js';
 import { checkCode, codeBlocks, warmCodeCheck } from './codecheck.js';
+import { DEVICE } from './hardware.js';
 import helmet from 'helmet';
 import https from 'https';
 import os from 'os';
@@ -342,16 +343,20 @@ const OLLAMA_NATIVE = (process.env.OLLAMA_URL || 'http://localhost:11434/v1').re
 // Learn on the live site: requests to your PC's Ollama carry the guard's key (see tunnel/learn-online.mjs)
 const OLLAMA_H = process.env.OLLAMA_API_KEY ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` } : {};
 const KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '2h';
-const BAKED = new Map(); // model → its built-in SYSTEM prompt
-async function bakedSystem(model) {
+const BAKED = new Map(); // model → { system, hybrid, at }
+async function modelMeta(model) {
   const hit = BAKED.get(model);
-  if (hit && Date.now() - hit.at < 60_000) return hit.system; // re-check every minute (picks up npm run build-models)
+  if (hit && Date.now() - hit.at < 60_000) return hit; // re-check every minute (picks up npm run build-models)
   try {
     const j = await (await fetch(`${OLLAMA_NATIVE}/api/show`, { method: 'POST', headers: OLLAMA_H, body: JSON.stringify({ model }), signal: AbortSignal.timeout(5000) })).json();
-    BAKED.set(model, { system: j.system || '', at: Date.now() });
-  } catch { return hit?.system || ''; }
-  return BAKED.get(model).system;
+    const tpl = `${j.template || ''} ${(j.details?.families || []).join(' ')} ${j.details?.family || ''}`;
+    const hybrid = /<think>|qwen3/i.test(tpl); // auto-detects Qwen3 hybrid thinking across any tier (1.7B, 4B, 8B, 14B, 32B, custom GGUF)
+    const entry = { system: j.system || '', hybrid, at: Date.now() };
+    BAKED.set(model, entry);
+    return entry;
+  } catch { return hit || { system: '', hybrid: !/-(code|pro|lite)(:|$)/.test(String(model)), at: 0 }; }
 }
+const bakedSystem = async (model) => (await modelMeta(model)).system;
 
 // Loads the model into memory and pre-processes its system prompt, so the first real message starts instantly.
 const WARM = new Map(); // model → the prompt it was last warmed with
@@ -362,26 +367,13 @@ app.post('/api/warm', async (req, res) => {
   try {
     if (kbId) kb.warm(kbId).catch(() => {});
     if (provider !== 'ollama' || !model) return done();
-    // Must build exactly the same system prompt as /api/chat, so the cached prompt matches
-    let sys = system || '';
-    if (OWN[String(model).replace(/:latest$/, '')]) { const b = await bakedSystem(model); if (b) sys = sys ? `${b}\n\n${sys}` : b; }
-    const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    sys = `${sys ? `${sys}\n\n` : ''}Today's date is ${today}.`;
-    // Already in memory with this exact prompt? → ready immediately (no second warm-up for the same model)
-    const key = `${model}\n${sys}`;
-    if (WARM.get(model) === key) {
-      const ps = await (await fetch(`${OLLAMA_NATIVE}/api/ps`, { headers: OLLAMA_H, signal: AbortSignal.timeout(3000) })).json().catch(() => ({}));
-      if ((ps.models || []).some((m) => m.name === model || m.model === model)) return done();
-    }
-    // If Ollama is busy with another long answer, don't make the app wait forever
-    await fetch(`${OLLAMA_NATIVE}/api/chat`, {
-      method: 'POST', headers: OLLAMA_H, signal: AbortSignal.timeout(45_000),
-      body: JSON.stringify({
-        model, stream: false, keep_alive: KEEP_ALIVE, options: { num_predict: 1 },
-        messages: sys ? [{ role: 'system', content: sys }, { role: 'user', content: 'hi' }] : [{ role: 'user', content: 'hi' }],
-      }),
+    // Load model weights into memory quickly without evaluating a huge prompt that blocks the user's first chat message
+    if (WARM.get(model)) return done();
+    await fetch(`${OLLAMA_NATIVE}/api/generate`, {
+      method: 'POST', headers: OLLAMA_H, signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({ model, prompt: '', stream: false, keep_alive: KEEP_ALIVE }),
     });
-    WARM.set(model, key);
+    WARM.set(model, '1');
   } catch {}
   done(); // replies when the model is loaded and its prompt is cached → the app shows "Ready"
 });
@@ -779,42 +771,33 @@ After the last file: at most 3 short lines (how to run).)` }];
   const level = projectMode ? 'project' : !hasImage && (isBuildRequest(lastText) || MEDIUM.test(lastText) || shortTopic) ? 'medium' : 'simple';
   let thinkMax = 0;
   if (ownLearn) {
-    const think = !!extendedThinking || reasoning === 'expert' || level !== 'simple';
-    // Thinking always has a limit (a small model otherwise argues with itself for minutes): medium → 8 lines,
-    // Expert / Extended thinking → 20 lines. Projects plan in their own step.
+    // Device-adaptive thinking: GPU / high-end machines think briefly on medium tasks too (~0.5s on GPU for extra accuracy);
+    // CPU / low-mid laptops skip forced /think on normal chat & single-file code so streaming begins immediately.
+    const remoteOllama = !/localhost|127\.0\.0\.1/i.test(p.base);
+    const fastDevice = DEVICE.fastGpu || remoteOllama;
+    const think = !!extendedThinking || reasoning === 'expert' || level === 'project' || (fastDevice && level === 'medium');
     const brief = level === 'project' || !think ? ''
       : level === 'medium' && !extendedThinking && reasoning !== 'expert' ? '\n\n(Think briefly: at most 8 short lines.)'
-        : '\n\n(Think step by step, but keep your thinking under 20 short lines; do not repeat yourself — then answer.)';
-    // Medium questions: the exact React / MUI / Vite / Recharts API from the downloaded docs (npm run load-docs)
-    // Short / typo-heavy requests ("doxc format view package need"): one quick no-think pass rewrites what the user
-    // MEANS ("an npm package to view .docx Word files in the browser") — small models misread typos far more than big ones
-    let meant = '', meantLine = '';
-    const wordsN = lastText.trim().split(/\s+/).length;
-    if (wordsN >= 2 && wordsN <= 12 && !hasImage && !projectMode && !/```/.test(lastText)
-      && !/^\s*(hi|hello|hey|thanks?|thank you|ok|okay|bye|good (morning|night|evening))\b/i.test(lastText)) {
-      const r = await pass(`Message with typos: "${lastText.replace(/"/g, "'")}"\n\nWhat does this person want? Fix the typos (e.g. doxc means docx = Word file). Answer in ONE line that starts with: They want`, { max: 60, temperature: 0, ms: 20_000, history: false, bare: true });
-      if (ctrl.signal.aborted) return res.end();
-      const line = r.split('\n').map((l) => l.trim()).find((l) => /^they want/i.test(l))?.replace(/^["'“]|["'”]$/g, '') || '';
-      if (line && line.length < 300) { meantLine = line.replace(/^they want/i, 'I want'); meant = `\n\n(I mean: ${meantLine})`; }
-    }
+        : '\n\n(Think step by step, but keep your thinking under 15 short lines; do not repeat yourself — then answer.)';
     let ref = '';
+    const ragBudget = IS_VERCEL ? 2500 : DEVICE.ragBudget;
     // The React / MUI / Vite / Recharts docs only for questions that are actually about them (else they hijack the answer)
-    const aboutStack = /\b(react|mui|material[- ]ui|vite|recharts|jsx|tsx|hooks?|use[A-Z]\w+|component|props|state|theme|sx|redux|context)\b/i.test(meantLine || lastText);
+    const aboutStack = /\b(react|mui|material[- ]ui|vite|recharts|jsx|tsx|hooks?|use[A-Z]\w+|component|props|state|theme|sx|redux|context)\b/i.test(lastText);
     if (level === 'medium' && aboutStack && !IS_VERCEL) {
-      const hits = await kb.search('docs', meantLine || lastText, { k: 3, budget: 2500 }).catch(() => []);
+      const hits = await kb.search('docs', lastText, { k: fastDevice ? 4 : 3, budget: ragBudget }).catch(() => []);
       if (hits.length) ref = `\n\n(Reference docs — use them ONLY if they are about what I asked, otherwise ignore them completely:\n${hits.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
     // Your own projects (npm run add-my-code) → Learn reuses your patterns and style
     if ((level === 'medium' || level === 'project') && (aboutStack || level === 'project') && !IS_VERCEL) {
-      const mine = await kb.search('mycode', meantLine || lastText, { k: 2, budget: 2500 }).catch(() => []);
+      const mine = await kb.search('mycode', lastText, { k: 2, budget: ragBudget }).catch(() => []);
       if (mine.length) ref += `\n\n(My earlier working code — reuse its style ONLY if it is about what I asked, otherwise ignore it:\n${mine.map((h) => `[${h.name}]\n${h.text}`).join('\n\n')})`;
     }
     // A bare topic ("php", "redux") → ask explicitly for a tutor-style overview (small models follow a direct ask far better than a rule)
     const overview = shortTopic ? '\n\n(Give a short overview of this topic like a good tutor: what it is in 1–2 sentences, its key features or main options as bullets, one small complete code example in a code block, and when to use it. Do not ask me questions back.)' : '';
-    // /think and /no_think are Qwen3 switches — Learn Code (Qwen2.5-Coder) doesn't think, so it gets neither (nor the thinking hints)
-    const hybrid = !/-code(:|$)/.test(String(model));
-    msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${meant}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${meant}${overview}${ref}`))];
-    thinkMax = level === 'project' ? 8192 : think ? 2000 : 600;
+    // /think and /no_think are Qwen3 switches — auto-detected from Ollama's model template across all hardware tiers
+    const { hybrid } = await modelMeta(model);
+    msgs = [...msgs.slice(0, -1), mapText(msgs[msgs.length - 1], (t) => (hybrid ? `${t}${overview}${ref}${brief} ${think ? '/think' : '/no_think'}` : `${t}${overview}${ref}`))];
+    thinkMax = level === 'project' ? 8192 : think ? (fastDevice ? 4096 : 2500) : (fastDevice ? 3000 : 1800);
   }
   // Verified Learn answers become training data (your own model's work; <think> and hidden docs/analysis are never saved)
   const saveTextLesson = (answer) => {
@@ -896,7 +879,8 @@ After the last file: at most 3 short lines (how to run).)` }];
   // ---------- Tool calling (agent loop): calculator, date/time, code runner, web search, memory ----------
   // Only when the message looks like it needs a tool — normal chat stays fast and streams word by word.
   const lastMsgForTools = messages[messages.length - 1];
-  const codingTools = ownLearn && level === 'medium' && !IS_VERCEL && toolsMode !== 'off';
+  // Docs & mycode are already injected into `ref` above and `checkCode` runs automatically after streaming — only block on non-streaming tool loop when explicitly enabled or needed
+  const codingTools = ownLearn && level === 'medium' && !IS_VERCEL && toolsMode === 'on';
   const imageIn = Array.isArray(lastMsgForTools?.content) && lastMsgForTools.content.some((x) => x.type === 'image_url');
   if (toolsMode !== 'off' && (toolsMode === 'on' || needsTools(lastText) || codingTools) && !imageIn && await supportsTools(provider, model)) {
     const codeOk = !!allowCode && !IS_VERCEL;
@@ -1214,6 +1198,7 @@ if (!IS_VERCEL) {
     if (CFG.host === '0.0.0.0') for (const nets of Object.values(os.networkInterfaces())) for (const n of nets || []) if (n.family === 'IPv4' && !n.internal) console.log(`  LAN → ${proto}://${n.address}:${PORT}`);
     if (OFFICE && CFG.host === '0.0.0.0' && !HTTPS_ON) console.warn('\n  \x1b[33m⚠⚠  HOST=0.0.0.0 WITHOUT HTTPS: passwords and chats cross the office network unencrypted. Set HTTPS_CERT / HTTPS_KEY (see OFFICE-SETUP.md).\x1b[0m');
     if (OFFICE && CFG.host === '0.0.0.0' && !CFG.allowedIps.length) console.warn('  ⚠ HOST=0.0.0.0 but OFFICE_ALLOWED_IPS is empty → only this PC is allowed in. Set e.g. OFFICE_ALLOWED_IPS=192.168.1.0/24');
+    console.log(`  Device tier: ${DEVICE.tier} — ${DEVICE.label}`);
     console.log('  Providers:', Object.keys(PROVIDERS).filter((k) => PROVIDERS[k].key).join(', '), '\n');
   };
   const listening = OFFICE ? server.listen(PORT, CFG.host, onUp) : server.listen(PORT, onUp);
