@@ -114,7 +114,7 @@ function ModelRow({ m, active, onPick }) {
       {m.own ? <AioAvatar /> : <ProviderAvatar id={m.provider} />}
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography noWrap sx={{ fontSize: 14, fontWeight: 500 }}>{m.own ? m.label : pretty(m.id)}</Typography>
-        <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>{m.own ? `${m.desc} · runs on your PC` : `${m.providerName} · ${m.id}`}</Typography>
+        <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>{m.own ? `${m.desc} · ${m.cloud ? 'always online' : 'runs on your PC'}` : `${m.providerName} · ${m.id}`}</Typography>
       </Box>
       {m.fast && <Tooltip title="Ultra fast"><BoltIcon sx={{ fontSize: 16, color: '#f59e0b' }} /></Tooltip>}
       {m.vision && <Tooltip title="Understands images"><VisibilityOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} /></Tooltip>}

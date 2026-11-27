@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { IS_VERCEL, KEYS_FILE } from './paths.js';
 import * as kb from './kb.js';
 import * as usage from './usage.js';
@@ -90,16 +90,29 @@ function loadFamily() {
   try { DEFAULT_OWN = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'default-model.json'), 'utf8')).model || f; } catch { DEFAULT_OWN = f; }
   OWN = {
     [`${f}-codeplus`]: { label: `${FAMILY.name} Code+`, desc: 'Your fine-tuned Learn · trained on your verified work', rank: 0, vision: false, fast: false },
-    [f]: { label: FAMILY.name, desc: 'Thinks first · codes · unlimited · on your PC', rank: 1, vision: true, fast: true },
-    [`${f}-code`]: { label: `${FAMILY.name} Code`, desc: 'Direct coder · Qwen2.5-Coder · code first, no fluff', rank: 2, vision: false, fast: false },
-    [`${f}-pro`]: { label: `${FAMILY.name} Pro`, desc: 'Balanced · everyday · on your PC', rank: 3, vision: true, fast: false },
-    [`${f}-lite`]: { label: `${FAMILY.name} Lite`, desc: 'Fastest · quick answers · on your PC', rank: 4, vision: false, fast: true },
+    [f]: { label: FAMILY.name, desc: 'Thinks first · codes · unlimited', rank: 1, vision: true, fast: true },
+    [`${f}-code`]: { label: `${FAMILY.name} Code`, desc: 'Direct coder · code first, no fluff', rank: 2, vision: false, fast: true },
+    [`${f}-pro`]: { label: `${FAMILY.name} Pro`, desc: 'Balanced · everyday', rank: 3, vision: true, fast: false },
+    [`${f}-lite`]: { label: `${FAMILY.name} Lite`, desc: 'Fastest · quick answers', rank: 4, vision: false, fast: true },
     [`${f}-vision`]: { label: `${FAMILY.name} Vision`, desc: 'Reads images', rank: 5, vision: true, fast: false, hidden: true }, // used automatically for images
-    [`${f}-max`]: { label: `${FAMILY.name} Max`, desc: 'Bigger brain for hard problems · slower', rank: 6, vision: false, fast: false, hidden: true }, // message box → 🧠 Max quality
+    [`${f}-max`]: { label: `${FAMILY.name} Max`, desc: 'Bigger brain for hard problems', rank: 6, vision: false, fast: false, hidden: true }, // message box → 🧠 Max quality
     [`${f}-32k`]: { label: `${FAMILY.name} 32K`, desc: 'Long window · only for Claude Code (claude-local.cmd)', rank: 7, vision: false, fast: false, hidden: true },
   };
 }
 loadFamily();
+
+// Built-in Learn instructions (used whenever Learn runs via always-online cloud fallback while your PC / Ollama is offline)
+function loadCoreSystem(modelId = '') {
+  try {
+    const core = fs.readFileSync(path.join(__dirname, 'models', 'system.md'), 'utf8').trim();
+    if (/-code(:|$)/.test(modelId)) {
+      return `You are ${FAMILY.name} Code, made by ${FAMILY.company || 'Evolvix'} — a direct, elite coding and technical AI assistant.\n`
+        + `- Start immediately with the answer or code in the first sentence. Never use greetings or closing summaries.\n`
+        + `- Output complete, clean, production-ready code with zero placeholders.\n\n${core}`;
+    }
+    return `You are ${FAMILY.name}, made by ${FAMILY.company || 'Evolvix'}. Only when asked who you are, say you are ${FAMILY.name} from ${FAMILY.company || 'Evolvix'}.\n\n${core}`;
+  } catch { return ''; }
+}
 const SKIP =/embed|whisper|tts|dall-e|image|moderation|audio|transcribe|realtime|guard|rerank|ocr/i;
 
 async function listModels(id, status) {
@@ -208,26 +221,68 @@ app.post('/api/search-keys', lock);
 app.post('/api/billing', lock);
 app.delete('/api/usage', lock);
 
-app.get('/api/models', async (req, res, next) => {
-  if (OFFICE && req.user?.role !== 'owner') { const j = res.json.bind(res); res.json = (d) => j(d?.models ? { ...d, models: d.models.filter((m) => modelAllowed(req, m.id)), status: [], missingKeys: [] } : d); }
-  if (!req.query.refresh && cache.data && Date.now() - cache.at < 10 * 60 * 1000) return res.json(cache.data);
+async function buildModelList() {
   loadFamily();
   const active = Object.keys(PROVIDERS).filter((id) => PROVIDERS[id].key);
   const status = [];
   const lists = await Promise.all(active.map((id) => listModels(id, status)));
   const flat = lists.flat();
-  const ownRank = (m) => OWN[m.id.replace(/:latest$/, '')].rank;
-  const models = [
-    ...flat.filter((m) => m.own).sort((a, b) => ownRank(a) - ownRank(b)), // your own models first
-    ...flat.filter((m) => !m.own).sort((a, b) =>
-      a.provider === b.provider ? Number(b.free) - Number(a.free) || a.id.localeCompare(b.id) : 0),
-  ];
+  const ownRank = (m) => OWN[m.id.replace(/:latest$/, '')]?.rank ?? 99;
+  let ownModels = flat.filter((m) => m.own).sort((a, b) => ownRank(a) - ownRank(b));
+  const cloudModels = flat.filter((m) => !m.own).sort((a, b) =>
+    a.provider === b.provider ? Number(b.free) - Number(a.free) || a.id.localeCompare(b.id) : 0);
+
+  // Permanent 24/7 availability: if local/tunnel Ollama is offline (e.g. on Vercel when your PC is off, or before Ollama starts),
+  // keep Learn, Learn Code, Learn Vision & Learn Max ALWAYS available using your system.md instructions + best connected cloud backend.
+  const usingCloudFallback = !ownModels.length && cloudModels.length > 0 && !OFFICE;
+  if (usingCloudFallback) {
+    const f = FAMILY.id;
+    ownModels = [f, `${f}-code`, `${f}-vision`, `${f}-max`].map((k) => ({
+      provider: 'ollama', providerName: `${FAMILY.name} · Your own models`, id: `${k}:latest`,
+      label: OWN[k].label, desc: OWN[k].desc, own: true, cloud: true, free: true,
+      fast: OWN[k].fast, vision: OWN[k].vision, hidden: !!OWN[k].hidden, default: k === f,
+    }));
+  }
+
+  const models = [...ownModels, ...cloudModels];
   const missingKeys = Object.keys(PROVIDERS).filter((id) => !PROVIDERS[id].key);
-  const data = { models, status, missingKeys };
+  const data = { models, status, missingKeys, usingCloudFallback };
   lastStatus = status;
-  // Only cache non-empty results, so starting Ollama / adding a key shows up on the next reload
-  cache = models.length ? { at: Date.now(), data } : { at: 0, data: null };
-  res.json(data);
+  cache = models.length ? { at: Date.now(), ttl: usingCloudFallback ? 60_000 : 10 * 60_000, data } : { at: 0, ttl: 0, data: null };
+  return data;
+}
+
+// Picks the best available FREE cloud model when Learn runs in 24/7 cloud-fallback mode (Vercel or offline Ollama)
+async function pickCloudFallback(modelId = '', needVision = false) {
+  const data = cache.data || await buildModelList();
+  const all = (data?.models || []).filter((m) => !m.own && PROVIDERS[m.provider]?.key);
+  const freePool = all.filter((m) => m.free && (!needVision || m.vision));
+  const pool = freePool.length ? freePool : all.filter((m) => !needVision || m.vision);
+  if (!pool.length) {
+    return all.find((m) => m.free) || all[0] || (PROVIDERS.pollinations?.key ? { provider: 'pollinations', id: 'openai' } : null);
+  }
+  const isCode = /-code(:|$)/.test(modelId);
+  const isMax = /-max(:|$)/.test(modelId);
+  const find = (prov, re) => pool.find((m) => m.provider === prov && (!re || re.test(m.id)));
+  if (isCode) {
+    return find('gemini', /flash|pro/i) || find('groq', /qwen|coder|70b/i) || find('deepseek', /coder|chat/i)
+      || find('anthropic') || find('openai') || find('openrouter', /coder.*:free|:free/i)
+      || find('pollinations', /coder|qwen|large|openai$/i) || find('pollinations') || pool[0];
+  }
+  if (isMax) {
+    return find('gemini', /pro|2\.5-flash|flash/i) || find('anthropic') || find('openai', /gpt-4|gpt-5|o3/i)
+      || find('deepseek') || find('groq', /70b|qwen/i) || find('openrouter', /70b.*:free|:free/i)
+      || find('pollinations', /large|claude|gemini|openai$/i) || find('pollinations') || pool[0];
+  }
+  return find('gemini', /flash/i) || find('groq', /70b|llama|qwen/i) || find('anthropic') || find('openai')
+    || find('deepseek') || find('mistral') || find('openrouter', /:free/i)
+    || find('pollinations', /^openai$|large|fast/i) || find('pollinations') || pool[0];
+}
+
+app.get('/api/models', async (req, res) => {
+  if (OFFICE && req.user?.role !== 'owner') { const j = res.json.bind(res); res.json = (d) => j(d?.models ? { ...d, models: d.models.filter((m) => modelAllowed(req, m.id)), status: [], missingKeys: [] } : d); }
+  if (!req.query.refresh && cache.data && Date.now() - cache.at < (cache.ttl || 10 * 60_000)) return res.json(cache.data);
+  res.json(await buildModelList());
 });
 
 // Provider list for the "Connect providers" screen (never returns the keys themselves)
@@ -378,13 +433,34 @@ app.post('/api/warm', async (req, res) => {
   done(); // replies when the model is loaded and its prompt is cached → the app shows "Ready"
 });
 
-// Is this model installed in Ollama? Uses the model list if loaded, otherwise asks Ollama (works right after a restart).
+// Is this model actually installed and reachable on Ollama right now? (Ignores synthetic cloud-fallback entries.)
 async function ollamaHas(id) {
-  if (cache.data?.models.some((m) => m.id === id)) return true; // hidden models (learn-vision) aren't in this list → ask Ollama
+  if (!PROVIDERS.ollama?.key) return false;
   try {
-    const j = await (await fetch(`${OLLAMA_NATIVE}/api/tags`, { headers: OLLAMA_H, signal: AbortSignal.timeout(3000) })).json();
-    return (j.models || []).some((m) => m.name === id || m.model === id);
+    const j = await (await fetch(`${OLLAMA_NATIVE}/api/tags`, { headers: OLLAMA_H, signal: AbortSignal.timeout(2000) })).json();
+    const norm = String(id).replace(/:latest$/, '');
+    return (j.models || []).some((m) => {
+      const n = String(m.name || m.model || '').replace(/:latest$/, '');
+      return n === norm;
+    });
   } catch { return false; }
+}
+
+// Local PC permanent fix: if Ollama is installed on this machine but wasn't started yet, launch `ollama serve` in the background
+async function ensureLocalOllama() {
+  if (IS_VERCEL || !/^https?:\/\/(localhost|127\.0\.0\.1)\b/i.test(PROVIDERS.ollama.base)) return;
+  try {
+    const r = await fetch(`${OLLAMA_NATIVE}/api/version`, { signal: AbortSignal.timeout(1200) });
+    if (r.ok) return;
+  } catch {}
+  const winExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe');
+  const exe = os.platform() === 'win32' && fs.existsSync(winExe) ? winExe : 'ollama';
+  try {
+    const child = spawn(exe, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.on('error', () => {});
+    child.unref();
+    console.log('  ↻ Started local Ollama background service automatically');
+  } catch {}
 }
 
 // qwen3 / DeepSeek-R1 think inside <think>…</think> (or <thinking>); that text never belongs in an answer, a check or a lesson
@@ -437,6 +513,24 @@ app.post('/api/chat', async (req, res) => {
     else if (obj.t === 'verify') lastVerify = obj.v; else if (obj.t === 'error') errored = true;
     res.write(JSON.stringify(obj) + '\n');
   };
+
+  // Permanent local + server fix: if a Learn model is selected and local/tunnel Ollama isn't reachable (e.g. Vercel 24/7 or PC offline),
+  // seamlessly run Learn on the best connected cloud backend with your exact models/system.md instructions.
+  const requestedBase = String(model || '').replace(/:latest$/, '');
+  const isOwnRequest = provider === 'ollama' && !!OWN[requestedBase];
+  const hasUserImage = messages.some((m) => Array.isArray(m.content) && m.content.some((x) => x.type === 'image_url'));
+  let cloudLearn = false;
+  if (isOwnRequest && !OFFICE && !(await ollamaHas(model))) {
+    const fb = await pickCloudFallback(requestedBase, hasUserImage);
+    if (fb && PROVIDERS[fb.provider]?.key) {
+      const coreSys = loadCoreSystem(requestedBase);
+      if (coreSys) system = system ? `${coreSys}\n\n${system}` : coreSys;
+      provider = fb.provider;
+      model = fb.id;
+      p = PROVIDERS[provider];
+      cloudLearn = true;
+    }
+  }
 
   if (!p || !p.key) { send({ t: 'error', v: `${p?.name || provider} is not connected — add its API key in Models → Connect providers` }); return res.end(); }
   // Office mode: what this user may do (403 + "Ask the owner"), then one generation at a time per model (owner first)
@@ -808,15 +902,16 @@ After the last file: at most 3 short lines (how to run).)` }];
       fs.appendFileSync(path.join(dir, 'lessons.jsonl'), JSON.stringify({ messages: [{ role: 'user', content: lastText }, { role: 'assistant', content: noThink(answer) }], verified: true, check: 'code-check', model, ...trainTag, at: new Date().toISOString() }) + '\n');
     } catch (e) { console.warn('[lessons]', e.message); }
   };
-  // After the answer (Learn, local only): instant code checks → pass = "Checked ✓". Fail → a quick fix, then up to 2 fresh
+  // After the answer (Learn): instant code checks → pass = "Checked ✓". Fail → a quick fix, then up to 2 fresh
   // candidates (temperature 0.7); the first that passes is kept and shown as "🔧 Quick fix"
+  // Note: saveTextLesson / savePair only save when ownLearn is true (never saves cloud fallback outputs into training data).
   const afterAnswer = async (answer) => {
-    if (!ownLearn || IS_VERCEL) return selfCheck(answer);
+    if ((!ownLearn && !cloudLearn) || IS_VERCEL) return selfCheck(answer);
     if (!answer.trim() || ctrl.signal.aborted || !codeBlocks(answer).length) return;
     const errors = await checkCode(answer).catch(() => []);
     if (!errors.length) {
       send({ t: 'verify', v: { status: 'ok', label: 'Checked ✓' } });
-      saveTextLesson(answer);
+      if (ownLearn) saveTextLesson(answer);
       logQuality('code', 'passed first try');
       return;
     }
@@ -839,7 +934,7 @@ After the last file: at most 3 short lines (how to run).)` }];
       for (let k = 0; k < block.length; k += 40) send({ t: 'text', v: block.slice(k, k + 40) });
       step('fix', `${t.label} passed the code check`, 'done');
       send({ t: 'verify', v: { status: 'ok', label: i ? `Checked ✓ (attempt ${i + 2})` : 'Checked ✓ (after quick fix)' } });
-      savePair(answer, i ? cand : `${answer}${block}`); // broken first try ✗ vs passing version ✓ → DPO pair
+      if (ownLearn) savePair(answer, i ? cand : `${answer}${block}`); // broken first try ✗ vs passing version ✓ → DPO pair (local Learn only)
       logQuality('code', i ? `passed on fresh attempt ${i + 1}` : 'passed after quick fix');
       return;
     }
@@ -1189,6 +1284,7 @@ export default app; // used by api/index.js on Vercel
 
 const PORT = process.env.PORT || 3001;
 if (!IS_VERCEL) {
+  ensureLocalOllama();
   const started = await officeStart();
   globalThis.__evxFirewallOpen = !!started.firewallOpen;
   const server = HTTPS_ON ? https.createServer({ cert: fs.readFileSync(CFG.httpsCert), key: fs.readFileSync(CFG.httpsKey) }, app) : app;
